@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"time"
 
 	"github.com/wittywilla/wittymodule"
 	"github.com/wittywilla/wittytuner"
@@ -37,13 +36,16 @@ func main() {
 	}
 }
 
-// envFor is what a server told this process about itself. A helper starts with almost no
+// envFor is what a server told this process about itself, with clients chosen by the call: a
+// playlist from the internet doesn't get to reach the home network. A helper starts with almost no
 // environment of its own.
 func envFor(c *wittytuner.HelperCall) wittytuner.Env {
-	return wittytuner.Env{HTTP: &http.Client{Timeout: 30 * time.Second}, Stream: &http.Client{}, FFmpeg: c.FFmpeg, AllowCommands: c.AllowCommands,
-		Command: func(ctx context.Context, name string, args ...string) *exec.Cmd {
-			return exec.CommandContext(ctx, name, args...)
-		}}
+	env := wittytuner.HelperEnvFor(c.Driver, c.Options)
+	env.FFmpeg, env.AllowCommands = c.FFmpeg, c.AllowCommands
+	env.Command = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, name, args...)
+	}
+	return env
 }
 
 func handle(method string, raw json.RawMessage) (any, func(io.Writer) error, error) {

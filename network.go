@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
@@ -114,7 +115,7 @@ func getJSON(ctx context.Context, c *http.Client, addr string, out any) error {
 	}
 	res, err := c.Do(req)
 	if err != nil {
-		return err
+		return withoutAddress(err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
@@ -179,7 +180,7 @@ func (t *netTuner) Scan(ctx context.Context, o ScanOptions, progress func(Progre
 	}
 	res, err := t.env.http().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("the scan could not start: %w", err)
+		return nil, fmt.Errorf("the scan could not start: %w", withoutAddress(err))
 	}
 	res.Body.Close()
 	if res.StatusCode >= 400 {
@@ -226,7 +227,7 @@ func (t *netTuner) Open(ctx context.Context, ch Channel) (*Stream, error) {
 	}
 	res, err := t.env.stream().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("the tuner could not be reached: %w", err)
+		return nil, fmt.Errorf("the tuner could not be reached: %w", withoutAddress(err))
 	}
 	if res.StatusCode != 200 {
 		defer res.Body.Close()
@@ -350,10 +351,46 @@ func parseHDHRReply(b []byte) (r hdhrReply, ok bool) {
 }
 
 // lanHost keeps discovery to the local network: a reply cannot send the
-// server off to the internet.
+// server off to the internet, or to where a cloud host answers about itself.
 func lanHost(host string) bool {
 	ip := net.ParseIP(host)
-	return ip != nil && (ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast())
+	return ip != nil && (ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast()) && reachable(ip, true)
+}
+
+// discoveredAt reads the address in an answer to a search. Anyone on the network can answer, and
+// name anything, so it must be the machine that answered, by its address: otherwise a device could
+// send this server off to fetch addresses elsewhere.
+func discoveredAt(loc string, from net.Addr) (*url.URL, bool) {
+	u, err := url.Parse(loc)
+	if err != nil || u.Scheme != "http" || u.User != nil {
+		return nil, false
+	}
+	host, err := netip.ParseAddr(u.Hostname())
+	if err != nil {
+		return nil, false
+	}
+	sender, ok := from.(*net.UDPAddr)
+	if !ok {
+		return nil, false
+	}
+	addr, ok := netip.AddrFromSlice(sender.IP)
+	if !ok || host.Unmap().WithZone("") != addr.Unmap().WithZone("") || !lanHost(host.WithZone("").String()) {
+		return nil, false
+	}
+	return u, true
+}
+
+// noRedirect keeps a device from sending the question on: it may name itself and nothing else.
+func noRedirect(c *http.Client) *http.Client {
+	out := *c
+	out.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &out
+}
+
+func discoverDevice(ctx context.Context, env Env, host string) (discoverJSON, error) {
+	var d discoverJSON
+	err := getJSON(ctx, noRedirect(env.http()), "http://"+host+"/discover.json", &d)
+	return d, err
 }
 
 func discoverNetworkTuners(ctx context.Context, env Env) []Found {
@@ -373,7 +410,7 @@ func discoverNetworkTuners(ctx context.Context, env Env) []Found {
 				break
 			}
 			if _, ok := parseHDHRReply(buf[:n]); ok {
-				if u, ok := from.(*net.UDPAddr); ok {
+				if u, ok := from.(*net.UDPAddr); ok && lanHost(u.IP.String()) {
 					hosts[u.IP.String()] = true
 				}
 			}
@@ -381,15 +418,14 @@ func discoverNetworkTuners(ctx context.Context, env Env) []Found {
 	}
 	// SSDP, which devices that emulate one answer.
 	for _, loc := range ssdpSearch(ctx, "urn:schemas-upnp-org:device:MediaServer:1", 1500*time.Millisecond) {
-		if u, err := url.Parse(loc); err == nil && lanHost(u.Hostname()) {
+		if u, err := url.Parse(loc); err == nil {
 			hosts[u.Host] = true
 		}
 	}
 	var out []Found
 	for h := range hosts {
-		var d discoverJSON
 		c, cancel := context.WithTimeout(ctx, 2*time.Second)
-		err := getJSON(c, env.http(), "http://"+h+"/discover.json", &d)
+		d, err := discoverDevice(c, env, h)
 		cancel()
 		if err != nil || (d.DeviceID == "" && d.ModelNumber == "") {
 			continue
@@ -427,7 +463,8 @@ func broadcastAddrs() []net.IP {
 	return out
 }
 
-// ssdpSearch multicasts an M-SEARCH and collects the LOCATION of each answer.
+// ssdpSearch multicasts an M-SEARCH and collects the LOCATION of each answer that names
+// the machine that answered.
 func ssdpSearch(ctx context.Context, st string, wait time.Duration) []string {
 	conn, err := net.ListenPacket("udp4", ":0")
 	if err != nil {
@@ -446,11 +483,14 @@ func ssdpSearch(ctx context.Context, st string, wait time.Duration) []string {
 	var out []string
 	buf := make([]byte, 4096)
 	for {
-		n, _, err := conn.ReadFrom(buf)
+		n, from, err := conn.ReadFrom(buf)
 		if err != nil {
 			return out
 		}
 		if loc := ssdpLocation(buf[:n]); loc != "" && !seen[loc] {
+			if _, ok := discoveredAt(loc, from); !ok {
+				continue
+			}
 			seen[loc] = true
 			out = append(out, loc)
 		}

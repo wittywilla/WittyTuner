@@ -105,6 +105,11 @@ func checkStreamURL(raw string, local bool) error {
 
 // checkOpening is checkStreamURL for a stream about to be opened, which can afford to ask
 // where a name really leads. A playlist's thousands of channels can't.
+//
+// It looks once, apart from the connection, so a name that changes its answer gets round it. What
+// holds is the client's check on each connection: the server's in internal/livetv, and HelperEnv
+// in a helper. This gives a clear message early, and covers what FFmpeg opens by itself as far as
+// it can.
 func checkOpening(raw string, local bool) error {
 	if err := checkStreamURL(raw, local); err != nil {
 		return err
@@ -116,10 +121,50 @@ func checkOpening(raw string, local bool) error {
 	if err != nil {
 		return errors.New("that is not a stream address")
 	}
-	if host := u.Hostname(); net.ParseIP(host) == nil && !resolvesOutside(host) {
+	host := u.Hostname()
+	if net.ParseIP(host) != nil {
+		return nil
+	}
+	// Go doesn't read these as addresses and the C library does, so what FFmpeg opens could be
+	// this machine: 2130706433, 127.1, 0x7f.1. No real name ends in a number.
+	if numericName(host) {
 		return errors.New("a playlist from elsewhere may not point at this server")
 	}
+	ips, err := lookupHost(strings.TrimSuffix(host, "."))
+	if err != nil {
+		return nil // it leads nowhere from here; going through a proxy, it might yet lead somewhere fine
+	}
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() {
+			return errors.New("a playlist from elsewhere may not point at this server")
+		}
+	}
 	return nil
+}
+
+func numericName(host string) bool {
+	last := strings.TrimSuffix(host, ".")
+	if i := strings.LastIndexByte(last, '.'); i >= 0 {
+		last = last[i+1:]
+	}
+	if rest, ok := strings.CutPrefix(strings.ToLower(last), "0x"); ok {
+		last = rest
+		for _, c := range last {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+				return false
+			}
+		}
+		return true
+	}
+	if last == "" {
+		return false
+	}
+	for _, c := range last {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // noWayHome is a client that won't follow a redirect to this machine.
@@ -146,21 +191,6 @@ var lookupHost = func(host string) ([]net.IP, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	return net.DefaultResolver.LookupIP(ctx, "ip", host)
-}
-
-// resolvesOutside says a name doesn't lead to this machine, whatever the name looks like.
-// One that can't be looked up leads nowhere yet, and fails by itself when it's opened.
-func resolvesOutside(host string) bool {
-	ips, err := lookupHost(strings.TrimSuffix(host, "."))
-	if err != nil {
-		return true
-	}
-	for _, ip := range ips {
-		if ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() {
-			return false
-		}
-	}
-	return true
 }
 
 // M3UEntry is one channel of a playlist.
@@ -321,18 +351,7 @@ func (s *iptv) Info() Info {
 	return i
 }
 
-func (s *iptv) localPlaylist() bool {
-	if !strings.Contains(s.playlist, "://") {
-		return true
-	}
-	u, err := url.Parse(s.playlist)
-	if err != nil {
-		return false
-	}
-	h := u.Hostname()
-	ip := net.ParseIP(h)
-	return strings.EqualFold(h, "localhost") || (ip != nil && (ip.IsLoopback() || ip.IsPrivate()))
-}
+func (s *iptv) localPlaylist() bool { return LocalPlaylist(s.playlist) }
 
 func (s *iptv) load(ctx context.Context) (*M3U, error) {
 	var r io.ReadCloser
@@ -346,7 +365,7 @@ func (s *iptv) load(ctx context.Context) (*M3U, error) {
 		}
 		res, err := s.env.http().Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("the playlist could not be fetched: %w", err)
+			return nil, fmt.Errorf("the playlist could not be fetched: %w", withoutAddress(err))
 		}
 		if res.StatusCode != 200 {
 			res.Body.Close()
@@ -476,7 +495,7 @@ func openHTTPStream(ctx context.Context, env Env, ch Channel, ua string, headers
 	}
 	res, err := env.stream().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("the stream could not be reached: %w", err)
+		return nil, fmt.Errorf("the stream could not be reached: %w", withoutAddress(err))
 	}
 	if res.StatusCode == 503 || res.StatusCode == 429 {
 		res.Body.Close()
@@ -553,61 +572,8 @@ type prefixed struct {
 
 func (p *prefixed) Close() error { return p.c.Close() }
 
-// hlsProtection says why an HLS playlist cannot be played, or "".
-func hlsProtection(b []byte) string {
-	sc := bufio.NewScanner(bytes.NewReader(b))
-	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
-	for sc.Scan() {
-		l := strings.TrimSpace(sc.Text())
-		if !strings.HasPrefix(l, "#EXT-X-KEY:") && !strings.HasPrefix(l, "#EXT-X-SESSION-KEY:") && !strings.HasPrefix(l, "#EXT-X-MAP:") {
-			continue
-		}
-		if strings.HasPrefix(l, "#EXT-X-MAP:") {
-			continue
-		}
-		attrs := strings.ToUpper(l)
-		if strings.Contains(attrs, "METHOD=NONE") {
-			continue
-		}
-		if strings.Contains(attrs, "KEYFORMAT") || strings.Contains(attrs, "SAMPLE-AES") {
-			return "its HLS playlist uses DRM"
-		}
-		return "its HLS playlist is encrypted"
-	}
-	return ""
-}
-
 // maxHLSVariants is more variants than a real channel has, each one a request.
 const maxHLSVariants = 32
-
-// hlsVariants finds a master playlist's streams, and what its audio and subtitle
-// renditions point at: any of them could be what FFmpeg reads.
-func hlsVariants(b []byte) []string {
-	sc := bufio.NewScanner(bytes.NewReader(b))
-	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
-	next := false
-	var out []string
-	for sc.Scan() {
-		l := strings.TrimSpace(sc.Text())
-		if strings.HasPrefix(l, "#EXT-X-STREAM-INF") {
-			next = true
-			continue
-		}
-		if strings.HasPrefix(l, "#EXT-X-MEDIA:") {
-			if m := hlsMediaURI.FindStringSubmatch(l); m != nil {
-				out = append(out, m[1])
-			}
-			continue
-		}
-		if next && l != "" && !strings.HasPrefix(l, "#") {
-			out = append(out, l)
-			next = false
-		}
-	}
-	return out
-}
-
-var hlsMediaURI = regexp.MustCompile(`URI="([^"]+)"`)
 
 // readPlaylist fetches a playlist. What arrived comes back even with an error: a key in
 // a playlist that was cut short, or came with a bad status, is still a key.
@@ -624,7 +590,7 @@ func readPlaylist(ctx context.Context, env Env, addr, ua string, headers http.He
 	}
 	res, err := env.http().Do(req)
 	if err != nil {
-		return nil, err
+		return nil, withoutAddress(err)
 	}
 	defer res.Body.Close()
 	b, err := io.ReadAll(io.LimitReader(res.Body, maxPlaylistRead))

@@ -91,7 +91,7 @@ func (b *backend) Channels(ctx context.Context) ([]Channel, error) {
 	}
 	res, err := b.env.http().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("the backend could not be reached: %w", err)
+		return nil, fmt.Errorf("the backend could not be reached: %w", withoutAddress(err))
 	}
 	defer res.Body.Close()
 	if res.StatusCode == 401 || res.StatusCode == 403 {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -66,7 +67,7 @@ func (s *satip) Channels(ctx context.Context) ([]Channel, error) {
 	}
 	res, err := s.env.http().Do(req)
 	if err != nil {
-		return nil, err
+		return nil, withoutAddress(err)
 	}
 	defer res.Body.Close()
 	m, err := ParseM3U(io.LimitReader(res.Body, maxPlaylist))
@@ -173,7 +174,20 @@ func (s *satip) Open(ctx context.Context, ch Channel) (*Stream, error) {
 	if err != nil || u.Scheme != "rtsp" {
 		return nil, errors.New("this channel's tuning address is not usable")
 	}
+	if !s.onServer(u) {
+		return nil, errors.New("this channel's tuning address isn't on its server")
+	}
 	return relay(ctx, s.env, s.input(ch.Locator))
+}
+
+// onServer: a channel list comes from whatever answers at its address, and is only a list of
+// tunings of this server. It can't send FFmpeg to something else on the network.
+func (s *satip) onServer(u *url.URL) bool {
+	host := s.host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return u.User == nil && strings.EqualFold(u.Hostname(), strings.Trim(host, "[]"))
 }
 
 func (s *satip) Close() error { return nil }
@@ -183,7 +197,7 @@ func discoverSATIP(ctx context.Context, env Env) []Found {
 	var out []Found
 	for _, loc := range ssdpSearch(ctx, "urn:ses-com:device:SatIPServer:1", 1500*time.Millisecond) {
 		u, err := url.Parse(loc)
-		if err != nil || !lanHost(u.Hostname()) {
+		if err != nil {
 			continue
 		}
 		name, caps := satipDescribe(ctx, env, loc)
@@ -199,11 +213,14 @@ func satipDescribe(ctx context.Context, env Env, loc string) (name, caps string)
 	if err != nil {
 		return "", ""
 	}
-	res, err := env.http().Do(req)
+	res, err := noRedirect(env.http()).Do(req)
 	if err != nil {
 		return "", ""
 	}
 	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return "", ""
+	}
 	var d struct {
 		Device struct {
 			Name string `xml:"friendlyName"`
