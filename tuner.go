@@ -13,9 +13,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os/exec"
 	"runtime"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -60,6 +62,10 @@ type Stream struct {
 	Guard *mpegts.Guard
 	// Verified: an Input stream was inspected on opening and found clear.
 	Verified bool
+	// Recheck looks again at an Input stream that can change while it plays. It says
+	// why the stream is now encrypted, or "", and how long until it's worth asking again.
+	// An error is a failure to find out, which says nothing about the stream.
+	Recheck func(ctx context.Context) (why string, next time.Duration, err error)
 }
 
 // Close releases what the stream holds.
@@ -157,8 +163,21 @@ type Env struct {
 	FFmpeg string
 	// Command prepares a process (the host hides console windows and so on).
 	Command func(ctx context.Context, name string, args ...string) *exec.Cmd
+	// refuseHere: this stream's playlist came from elsewhere, so nothing it names may
+	// lead back to this machine.
+	refuseHere bool
 	// AllowCommands: the owner has allowed the custom command driver.
 	AllowCommands bool
+	// Log is where drivers say what went wrong; nil says nothing. Records are
+	// written with the context the host passed in, so its session comes along.
+	Log *slog.Logger
+}
+
+func (e Env) logger() *slog.Logger {
+	if e.Log != nil {
+		return e.Log
+	}
+	return slog.New(slog.DiscardHandler)
 }
 
 func (e Env) http() *http.Client {
@@ -348,6 +367,20 @@ type Found struct {
 // Discover looks for tuners: on the local network and among this machine's
 // devices. It takes a couple of seconds.
 func Discover(ctx context.Context, env Env) []Found {
+	return discover(ctx, env, discoverNetworkTuners, discoverSATIP, discoverDVB, discoverV4L2, discoverCapture)
+}
+
+// DiscoverNetwork is the part of Discover that only needs a network.
+func DiscoverNetwork(ctx context.Context, env Env) []Found {
+	return discover(ctx, env, discoverNetworkTuners, discoverSATIP)
+}
+
+// DiscoverHere is the part of Discover that looks at this machine's own devices.
+func DiscoverHere(ctx context.Context, env Env) []Found {
+	return discover(ctx, env, discoverDVB, discoverV4L2, discoverCapture)
+}
+
+func discover(ctx context.Context, env Env, finders ...func(context.Context, Env) []Found) []Found {
 	var mu sync.Mutex
 	var out []Found
 	var wg sync.WaitGroup
@@ -355,17 +388,21 @@ func Discover(ctx context.Context, env Env) []Found {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// What answers on the network isn't to be trusted to parse cleanly.
+			defer func() {
+				if p := recover(); p != nil {
+					env.logger().ErrorContext(ctx, "tuner discovery crashed", "panic", fmt.Sprint(p), "stack", string(debug.Stack()))
+				}
+			}()
 			r := f(ctx, env)
 			mu.Lock()
 			out = append(out, r...)
 			mu.Unlock()
 		}()
 	}
-	add(discoverNetworkTuners)
-	add(discoverSATIP)
-	add(discoverDVB)
-	add(discoverV4L2)
-	add(discoverCapture)
+	for _, f := range finders {
+		add(f)
+	}
 	wg.Wait()
 	return out
 }

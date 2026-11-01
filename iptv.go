@@ -11,12 +11,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 )
 
 func init() {
@@ -98,6 +103,66 @@ func checkStreamURL(raw string, local bool) error {
 	return nil
 }
 
+// checkOpening is checkStreamURL for a stream about to be opened, which can afford to ask
+// where a name really leads. A playlist's thousands of channels can't.
+func checkOpening(raw string, local bool) error {
+	if err := checkStreamURL(raw, local); err != nil {
+		return err
+	}
+	if local {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return errors.New("that is not a stream address")
+	}
+	if host := u.Hostname(); net.ParseIP(host) == nil && !resolvesOutside(host) {
+		return errors.New("a playlist from elsewhere may not point at this server")
+	}
+	return nil
+}
+
+// noWayHome is a client that won't follow a redirect to this machine.
+func noWayHome(c *http.Client) *http.Client {
+	out := *c
+	before := c.CheckRedirect
+	out.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if err := checkOpening(req.URL.String(), false); err != nil {
+			return err
+		}
+		if before != nil {
+			return before(req, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("too many redirects")
+		}
+		return nil
+	}
+	return &out
+}
+
+// lookupHost is what a channel's name is asked of.
+var lookupHost = func(host string) ([]net.IP, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return net.DefaultResolver.LookupIP(ctx, "ip", host)
+}
+
+// resolvesOutside says a name doesn't lead to this machine, whatever the name looks like.
+// One that can't be looked up leads nowhere yet, and fails by itself when it's opened.
+func resolvesOutside(host string) bool {
+	ips, err := lookupHost(strings.TrimSuffix(host, "."))
+	if err != nil {
+		return true
+	}
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() {
+			return false
+		}
+	}
+	return true
+}
+
 // M3UEntry is one channel of a playlist.
 type M3UEntry struct {
 	Channel
@@ -109,6 +174,16 @@ type M3U struct {
 	GuideURL string
 	Entries  []M3UEntry
 	Skipped  int
+}
+
+// webLogo keeps a playlist's logo only when it is a web address: a playlist has
+// no business naming files on this machine.
+func webLogo(s string) string {
+	s = strings.TrimSpace(s)
+	if l := strings.ToLower(s); strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://") {
+		return s
+	}
+	return ""
 }
 
 // ParseM3U reads an extended M3U playlist. Comments it does not understand are
@@ -140,7 +215,7 @@ func ParseM3U(r io.Reader) (*M3U, error) {
 			head, title := splitExtinf(line[len("#EXTINF:"):])
 			attrs := parseAttrs(head)
 			cur = &M3UEntry{Channel: Channel{
-				Name: firstNonEmpty(title, attrs["tvg-name"]), EPGID: attrs["tvg-id"], Logo: attrs["tvg-logo"],
+				Name: firstNonEmpty(title, attrs["tvg-name"]), EPGID: attrs["tvg-id"], Logo: webLogo(attrs["tvg-logo"]),
 				Group: attrs["group-title"], Number: firstNonEmpty(attrs["tvg-chno"], attrs["channel-number"]),
 			}}
 		case strings.HasPrefix(line, "#EXTGRP:"):
@@ -337,14 +412,18 @@ func (s *iptv) Open(ctx context.Context, ch Channel) (*Stream, error) {
 		return nil, &EncryptedError{ch.Name, ch.Encrypted}
 	}
 	local := s.single != "" || s.localPlaylist()
-	if err := checkStreamURL(ch.Locator, local); err != nil {
+	if err := checkOpening(ch.Locator, local); err != nil {
 		return nil, err
 	}
 	u, _ := url.Parse(ch.Locator)
 	ua := s.cfg.Options["userAgent"]
 	switch strings.ToLower(u.Scheme) {
 	case "http", "https":
-		return openHTTPStream(ctx, s.env, ch, ua, nil)
+		env := s.env
+		if !local {
+			env.HTTP, env.Stream, env.refuseHere = noWayHome(env.http()), noWayHome(env.stream()), true
+		}
+		return openHTTPStream(ctx, env, ch, ua, nil)
 	// A relay turns the rest into MPEG-TS, so the guard can read them too.
 	case "rtp", "udp":
 		return relay(ctx, s.env, []string{"-protocol_whitelist", "udp,rtp", "-i", ch.Locator})
@@ -361,8 +440,11 @@ func (s *iptv) Open(ctx context.Context, ch Channel) (*Stream, error) {
 	}
 }
 
-// httpInput builds FFmpeg's options for an HTTP(S) address, leaving out the
-// crypto protocol so encrypted HLS segments cannot be read.
+// httpInput builds FFmpeg's options for an HTTP(S) address, leaving out the crypto
+// protocol. That isn't enough by itself: with these options the FFmpeg builds we ship
+// and Ubuntu's still ask for the key of AES-128 and SAMPLE-AES playlists, and no option
+// of their HLS demuxer turns that off. What keeps encrypted HLS out is reading the
+// playlists ourselves, on opening and again while the stream runs (hlsRecheck).
 func httpInput(addr, ua string, headers http.Header) []string {
 	in := []string{"-protocol_whitelist", "http,https,tcp,tls", "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5"}
 	if ua != "" {
@@ -426,15 +508,35 @@ func openHTTPStream(ctx context.Context, env Env, ch Channel, ua string, headers
 	if isHLS {
 		rest, _ := io.ReadAll(io.LimitReader(res.Body, 2<<20))
 		res.Body.Close()
-		if why := hlsProtection(append(head, rest...)); why != "" {
+		all := append(head, rest...)
+		if why := hlsProtection(all); why != "" {
 			return nil, &EncryptedError{ch.Name, why}
 		}
-		if v := firstVariant(append(head, rest...)); v != "" {
-			if why := checkVariant(ctx, env, ch.Locator, v, ua, headers); why != "" {
+		// FFmpeg may pick any variant, so every one has to be clear. "Verified" is only
+		// for a stream that was read all the way through.
+		whole := len(rest) < 2<<20
+		variants := hlsVariants(all)
+		if len(variants) > maxHLSVariants {
+			variants, whole = variants[:maxHLSVariants], false
+		}
+		for _, v := range variants {
+			if env.refuseHere {
+				bu, err := url.Parse(ch.Locator)
+				if err == nil {
+					if ru, err := bu.Parse(v); err == nil {
+						if err := checkOpening(ru.String(), false); err != nil {
+							return nil, err
+						}
+					}
+				}
+			}
+			why, read := checkVariant(ctx, env, ch.Locator, v, ua, headers)
+			if why != "" {
 				return nil, &EncryptedError{ch.Name, why}
 			}
+			whole = whole && read
 		}
-		return &Stream{Input: httpInput(ch.Locator, ua, headers), Verified: true}, nil
+		return &Stream{Input: httpInput(ch.Locator, ua, headers), Verified: whole, Recheck: hlsRecheck(env, ch.Locator, ua, headers)}, nil
 	}
 	if n >= 188 && head[0] == 0x47 && (n < 376 || head[188] == 0x47) {
 		// Raw MPEG-TS: read on, starting with what was already read.
@@ -475,36 +577,44 @@ func hlsProtection(b []byte) string {
 	return ""
 }
 
-// firstVariant finds a master playlist's first stream.
-func firstVariant(b []byte) string {
+// maxHLSVariants is more variants than a real channel has, each one a request.
+const maxHLSVariants = 32
+
+// hlsVariants finds a master playlist's streams, and what its audio and subtitle
+// renditions point at: any of them could be what FFmpeg reads.
+func hlsVariants(b []byte) []string {
 	sc := bufio.NewScanner(bytes.NewReader(b))
 	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	next := false
+	var out []string
 	for sc.Scan() {
 		l := strings.TrimSpace(sc.Text())
 		if strings.HasPrefix(l, "#EXT-X-STREAM-INF") {
 			next = true
 			continue
 		}
+		if strings.HasPrefix(l, "#EXT-X-MEDIA:") {
+			if m := hlsMediaURI.FindStringSubmatch(l); m != nil {
+				out = append(out, m[1])
+			}
+			continue
+		}
 		if next && l != "" && !strings.HasPrefix(l, "#") {
-			return l
+			out = append(out, l)
+			next = false
 		}
 	}
-	return ""
+	return out
 }
 
-func checkVariant(ctx context.Context, env Env, base, v, ua string, headers http.Header) string {
-	bu, err := url.Parse(base)
+var hlsMediaURI = regexp.MustCompile(`URI="([^"]+)"`)
+
+// readPlaylist fetches a playlist. What arrived comes back even with an error: a key in
+// a playlist that was cut short, or came with a bad status, is still a key.
+func readPlaylist(ctx context.Context, env Env, addr, ua string, headers http.Header) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", addr, nil)
 	if err != nil {
-		return ""
-	}
-	ru, err := bu.Parse(v)
-	if err != nil || (ru.Scheme != "http" && ru.Scheme != "https") {
-		return ""
-	}
-	req, err := http.NewRequestWithContext(ctx, "GET", ru.String(), nil)
-	if err != nil {
-		return ""
+		return nil, err
 	}
 	for k, vs := range headers {
 		req.Header[k] = vs
@@ -514,11 +624,119 @@ func checkVariant(ctx context.Context, env Env, base, v, ua string, headers http
 	}
 	res, err := env.http().Do(req)
 	if err != nil {
-		return ""
+		return nil, err
 	}
 	defer res.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(res.Body, 2<<20))
-	return hlsProtection(b)
+	b, err := io.ReadAll(io.LimitReader(res.Body, maxPlaylistRead))
+	switch {
+	case err != nil:
+		return b, err
+	case res.StatusCode != http.StatusOK:
+		return b, fmt.Errorf("the playlist answered %s", res.Status)
+	case len(b) >= maxPlaylistRead:
+		return b, errors.New("the playlist is too long to read")
+	}
+	return b, nil
+}
+
+const maxPlaylistRead = 2 << 20
+
+// variantURL resolves a variant against its master, for HTTP(S) only.
+func variantURL(base, v string) (string, bool) {
+	bu, err := url.Parse(base)
+	if err != nil {
+		return "", false
+	}
+	ru, err := bu.Parse(v)
+	if err != nil || (ru.Scheme != "http" && ru.Scheme != "https") {
+		return "", false
+	}
+	return ru.String(), true
+}
+
+// checkVariant says why one variant can't be played, or "", and whether it was read:
+// one that wasn't has said nothing either way.
+func checkVariant(ctx context.Context, env Env, base, v, ua string, headers http.Header) (why string, read bool) {
+	addr, ok := variantURL(base, v)
+	if !ok {
+		return "", false
+	}
+	b, err := readPlaylist(ctx, env, addr, ua, headers)
+	if why := hlsProtection(b); why != "" {
+		return why, true
+	}
+	return "", err == nil
+}
+
+// How often a live playlist is read again: as often as it changes, which its target
+// duration says, within these. A small request, and at most a few per check.
+const (
+	hlsRecheckMax       = 30 * time.Second
+	hlsVariantsPerCheck = 4
+)
+
+var hlsRecheckMin = 5 * time.Second
+
+var hlsTarget = regexp.MustCompile(`(?m)^#EXT-X-TARGETDURATION:\s*(\d+)`)
+
+// hlsRecheck reads a stream's playlists again, as a key can first appear long after
+// opening. A master with many variants has a few read each time, in turn.
+func hlsRecheck(env Env, locator, ua string, headers http.Header) func(context.Context) (string, time.Duration, error) {
+	var mu sync.Mutex
+	turn := 0
+	wait := hlsRecheckMin
+	learn := func(b []byte) {
+		if m := hlsTarget.FindSubmatch(b); m != nil {
+			if sec, err := strconv.Atoi(string(m[1])); err == nil && sec >= 0 && sec < 3600 {
+				wait = min(max(time.Duration(sec)*time.Second, hlsRecheckMin), hlsRecheckMax)
+			}
+		}
+	}
+	return func(ctx context.Context) (string, time.Duration, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		b, err := readPlaylist(ctx, env, locator, ua, headers)
+		if why := hlsProtection(b); why != "" {
+			return why, 0, nil
+		}
+		if err != nil {
+			return "", wait, err
+		}
+		learn(b)
+		variants := hlsVariants(b)
+		var failed error
+		for i := range min(len(variants), hlsVariantsPerCheck) {
+			addr, ok := variantURL(locator, variants[(turn+i)%len(variants)])
+			if !ok {
+				continue
+			}
+			// The master was checked on opening, and a new one may name somewhere new.
+			if env.refuseHere {
+				if u, e := url.Parse(addr); e != nil || !sameHost(u, locator) {
+					if e := checkOpening(addr, false); e != nil {
+						failed = e
+						continue
+					}
+				}
+			}
+			b, err := readPlaylist(ctx, env, addr, ua, headers)
+			if why := hlsProtection(b); why != "" {
+				return why, 0, nil
+			}
+			if err != nil {
+				failed = err
+				continue
+			}
+			learn(b)
+		}
+		turn += hlsVariantsPerCheck
+		return "", wait, failed
+	}
+}
+
+func sameHost(u *url.URL, other string) bool {
+	o, err := url.Parse(other)
+	return err == nil && strings.EqualFold(u.Host, o.Host)
 }
 
 // relay runs FFmpeg to bring a stream to MPEG-TS without converting anything.
@@ -530,6 +748,9 @@ func relay(ctx context.Context, env Env, input []string) (*Stream, error) {
 	args = append(args, "-map", "0", "-c", "copy", "-f", "mpegts", "pipe:1")
 	ctx, cancel := context.WithCancel(ctx)
 	cmd := env.command(ctx, env.FFmpeg, args...)
+	stderr := &stderrTail{}
+	cmd.Stderr = stderr
+	cmd.WaitDelay = 2 * time.Second // a child holding stderr open mustn't hold Close
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		cancel()
@@ -539,20 +760,78 @@ func relay(ctx context.Context, env Env, input []string) (*Stream, error) {
 		cancel()
 		return nil, err
 	}
-	return guarded(&procReader{ReadCloser: out, cancel: cancel, wait: cmd.Wait}), nil
+	return guarded(&procReader{ReadCloser: out, cancel: cancel, wait: cmd.Wait, ctx: ctx, log: env.logger(), what: "ffmpeg", stderr: stderr, started: time.Now()}), nil
 }
 
 type procReader struct {
 	io.ReadCloser
 	cancel context.CancelFunc
 	wait   func() error
+
+	ctx      context.Context
+	log      *slog.Logger
+	what     string
+	stderr   *stderrTail
+	started  time.Time
+	ended    atomic.Bool // what it was writing ran out before anyone closed it
+	waitOnce sync.Once
 }
 
+func (p *procReader) Read(b []byte) (int, error) {
+	n, err := p.ReadCloser.Read(b)
+	if err != nil {
+		p.ended.Store(true)
+	}
+	return n, err
+}
+
+// Close stops the process, and says how it ended if that wasn't this.
 func (p *procReader) Close() error {
+	ownAccord := p.ended.Load() && p.ctx.Err() == nil
 	p.cancel()
 	err := p.ReadCloser.Close()
-	_ = p.wait()
+	p.waitOnce.Do(func() {
+		werr := p.wait()
+		lv := slog.LevelDebug
+		if ownAccord && werr != nil {
+			lv = slog.LevelWarn
+		}
+		p.log.Log(p.ctx, lv, "process ended", "topic", "tuner", "process", p.what, "err", werr, "stderr", p.stderr.String(),
+			"ran", time.Since(p.started).Round(time.Millisecond).String())
+	})
 	return err
+}
+
+// stderrTail keeps the end of what a process prints, whatever it prints.
+type stderrTail struct {
+	mu sync.Mutex
+	b  []byte
+}
+
+const stderrKeep = 8 << 10
+
+func (t *stderrTail) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	n := len(p)
+	if len(p) >= stderrKeep {
+		t.b, p = t.b[:0], p[len(p)-stderrKeep:]
+	}
+	t.b = append(t.b, p...)
+	if len(t.b) > 2*stderrKeep {
+		t.b = append(t.b[:0], t.b[len(t.b)-stderrKeep:]...)
+	}
+	return n, nil
+}
+
+func (t *stderrTail) String() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	b := t.b
+	if len(b) > stderrKeep {
+		b = b[len(b)-stderrKeep:]
+	}
+	return strings.TrimSpace(string(b))
 }
 
 // basicAuth is the header for a login.
