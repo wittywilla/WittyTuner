@@ -105,6 +105,11 @@ func checkStreamURL(raw string, local bool) error {
 
 // checkOpening is checkStreamURL for a stream about to be opened, which can afford to ask
 // where a name really leads. A playlist's thousands of channels can't.
+//
+// It looks once, apart from the connection, so a name that changes its answer gets round it. What
+// holds is the client's check on each connection: the server's in internal/livetv, and HelperEnv
+// in a helper. This gives a clear message early, and covers what FFmpeg opens by itself as far as
+// it can.
 func checkOpening(raw string, local bool) error {
 	if err := checkStreamURL(raw, local); err != nil {
 		return err
@@ -116,8 +121,19 @@ func checkOpening(raw string, local bool) error {
 	if err != nil {
 		return errors.New("that is not a stream address")
 	}
-	if host := u.Hostname(); net.ParseIP(host) == nil && !resolvesOutside(host) {
-		return errors.New("a playlist from elsewhere may not point at this server")
+	host := u.Hostname()
+	if net.ParseIP(host) != nil {
+		return nil
+	}
+	ips, err := lookupHost(strings.TrimSuffix(host, "."))
+	if err != nil {
+		// What can't be read as a name here, FFmpeg's own lookup may read as an address.
+		return errors.New("that stream's address could not be looked up")
+	}
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() {
+			return errors.New("a playlist from elsewhere may not point at this server")
+		}
 	}
 	return nil
 }
@@ -146,21 +162,6 @@ var lookupHost = func(host string) ([]net.IP, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	return net.DefaultResolver.LookupIP(ctx, "ip", host)
-}
-
-// resolvesOutside says a name doesn't lead to this machine, whatever the name looks like.
-// One that can't be looked up leads nowhere yet, and fails by itself when it's opened.
-func resolvesOutside(host string) bool {
-	ips, err := lookupHost(strings.TrimSuffix(host, "."))
-	if err != nil {
-		return true
-	}
-	for _, ip := range ips {
-		if ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() {
-			return false
-		}
-	}
-	return true
 }
 
 // M3UEntry is one channel of a playlist.
