@@ -66,7 +66,7 @@ func (s *satip) Channels(ctx context.Context) ([]Channel, error) {
 	}
 	res, err := s.env.http().Do(req)
 	if err != nil {
-		return nil, err
+		return nil, withoutAddress(err)
 	}
 	defer res.Body.Close()
 	m, err := ParseM3U(io.LimitReader(res.Body, maxPlaylist))

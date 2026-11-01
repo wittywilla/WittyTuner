@@ -346,7 +346,7 @@ func (s *iptv) load(ctx context.Context) (*M3U, error) {
 		}
 		res, err := s.env.http().Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("the playlist could not be fetched: %w", err)
+			return nil, fmt.Errorf("the playlist could not be fetched: %w", withoutAddress(err))
 		}
 		if res.StatusCode != 200 {
 			res.Body.Close()
@@ -476,7 +476,7 @@ func openHTTPStream(ctx context.Context, env Env, ch Channel, ua string, headers
 	}
 	res, err := env.stream().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("the stream could not be reached: %w", err)
+		return nil, fmt.Errorf("the stream could not be reached: %w", withoutAddress(err))
 	}
 	if res.StatusCode == 503 || res.StatusCode == 429 {
 		res.Body.Close()
@@ -571,7 +571,7 @@ func readPlaylist(ctx context.Context, env Env, addr, ua string, headers http.He
 	}
 	res, err := env.http().Do(req)
 	if err != nil {
-		return nil, err
+		return nil, withoutAddress(err)
 	}
 	defer res.Body.Close()
 	b, err := io.ReadAll(io.LimitReader(res.Body, maxPlaylistRead))

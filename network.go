@@ -114,7 +114,7 @@ func getJSON(ctx context.Context, c *http.Client, addr string, out any) error {
 	}
 	res, err := c.Do(req)
 	if err != nil {
-		return err
+		return withoutAddress(err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
@@ -179,7 +179,7 @@ func (t *netTuner) Scan(ctx context.Context, o ScanOptions, progress func(Progre
 	}
 	res, err := t.env.http().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("the scan could not start: %w", err)
+		return nil, fmt.Errorf("the scan could not start: %w", withoutAddress(err))
 	}
 	res.Body.Close()
 	if res.StatusCode >= 400 {
@@ -226,7 +226,7 @@ func (t *netTuner) Open(ctx context.Context, ch Channel) (*Stream, error) {
 	}
 	res, err := t.env.stream().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("the tuner could not be reached: %w", err)
+		return nil, fmt.Errorf("the tuner could not be reached: %w", withoutAddress(err))
 	}
 	if res.StatusCode != 200 {
 		defer res.Body.Close()
