@@ -183,7 +183,7 @@ func discoverSATIP(ctx context.Context, env Env) []Found {
 	var out []Found
 	for _, loc := range ssdpSearch(ctx, "urn:ses-com:device:SatIPServer:1", 1500*time.Millisecond) {
 		u, err := url.Parse(loc)
-		if err != nil || !lanHost(u.Hostname()) {
+		if err != nil {
 			continue
 		}
 		name, caps := satipDescribe(ctx, env, loc)
@@ -199,11 +199,14 @@ func satipDescribe(ctx context.Context, env Env, loc string) (name, caps string)
 	if err != nil {
 		return "", ""
 	}
-	res, err := env.http().Do(req)
+	res, err := noRedirect(env.http()).Do(req)
 	if err != nil {
 		return "", ""
 	}
 	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return "", ""
+	}
 	var d struct {
 		Device struct {
 			Name string `xml:"friendlyName"`
