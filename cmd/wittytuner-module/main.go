@@ -12,9 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"net/http"
 	"os"
-	"time"
 
 	"github.com/wittywilla/wittymodule"
 	"github.com/wittywilla/wittytuner"
@@ -37,9 +35,8 @@ func main() {
 	}
 }
 
-// env has no FFmpeg and no custom commands: a helper runs nothing else.
-var env = wittytuner.Env{HTTP: &http.Client{Timeout: 30 * time.Second}, Stream: &http.Client{}}
-
+// A helper's Env has no FFmpeg and no custom commands: a helper runs nothing else. Its clients
+// are chosen by the call: a playlist from the internet doesn't get to reach the home network.
 func handle(method string, raw json.RawMessage) (any, func(io.Writer) error, error) {
 	var c wittytuner.HelperCall
 	if err := json.Unmarshal(raw, &c); err != nil {
@@ -48,10 +45,10 @@ func handle(method string, raw json.RawMessage) (any, func(io.Writer) error, err
 	ctx := context.Background()
 	if method == "discover" {
 		return nil, func(w io.Writer) error {
-			return send(w, wittytuner.HelperDoc{Found: wittytuner.DiscoverNetwork(ctx, env), Done: true})
+			return send(w, wittytuner.HelperDoc{Found: wittytuner.DiscoverNetwork(ctx, wittytuner.HelperEnv(true)), Done: true})
 		}, nil
 	}
-	src, err := wittytuner.New(c.Driver, wittytuner.Config{Name: c.Name, Options: c.Options}, env)
+	src, err := wittytuner.New(c.Driver, wittytuner.Config{Name: c.Name, Options: c.Options}, wittytuner.HelperEnvFor(c.Driver, c.Options))
 	if err != nil {
 		return nil, nil, coded(err)
 	}

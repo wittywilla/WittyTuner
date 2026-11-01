@@ -321,18 +321,7 @@ func (s *iptv) Info() Info {
 	return i
 }
 
-func (s *iptv) localPlaylist() bool {
-	if !strings.Contains(s.playlist, "://") {
-		return true
-	}
-	u, err := url.Parse(s.playlist)
-	if err != nil {
-		return false
-	}
-	h := u.Hostname()
-	ip := net.ParseIP(h)
-	return strings.EqualFold(h, "localhost") || (ip != nil && (ip.IsLoopback() || ip.IsPrivate()))
-}
+func (s *iptv) localPlaylist() bool { return LocalPlaylist(s.playlist) }
 
 func (s *iptv) load(ctx context.Context) (*M3U, error) {
 	var r io.ReadCloser
