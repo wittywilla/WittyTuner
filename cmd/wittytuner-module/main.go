@@ -41,7 +41,9 @@ func main() {
 // environment of its own.
 func envFor(c *wittytuner.HelperCall) wittytuner.Env {
 	return wittytuner.Env{HTTP: &http.Client{Timeout: 30 * time.Second}, Stream: &http.Client{}, FFmpeg: c.FFmpeg, AllowCommands: c.AllowCommands,
-		Command: func(ctx context.Context, name string, args ...string) *exec.Cmd { return exec.CommandContext(ctx, name, args...) }}
+		Command: func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			return exec.CommandContext(ctx, name, args...)
+		}}
 }
 
 func handle(method string, raw json.RawMessage) (any, func(io.Writer) error, error) {
