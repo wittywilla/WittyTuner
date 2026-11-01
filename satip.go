@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -173,7 +174,20 @@ func (s *satip) Open(ctx context.Context, ch Channel) (*Stream, error) {
 	if err != nil || u.Scheme != "rtsp" {
 		return nil, errors.New("this channel's tuning address is not usable")
 	}
+	if !s.onServer(u) {
+		return nil, errors.New("this channel's tuning address isn't on its server")
+	}
 	return relay(ctx, s.env, s.input(ch.Locator))
+}
+
+// onServer: a channel list comes from whatever answers at its address, and is only a list of
+// tunings of this server. It can't send FFmpeg to something else on the network.
+func (s *satip) onServer(u *url.URL) bool {
+	host := s.host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return u.User == nil && strings.EqualFold(u.Hostname(), strings.Trim(host, "[]"))
 }
 
 func (s *satip) Close() error { return nil }
