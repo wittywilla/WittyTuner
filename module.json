@@ -1,16 +1,18 @@
 {
   "id": "wittytuner",
   "name": "WittyTuner",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "repo": "wittywilla/WittyTuner",
   "license": "Apache-2.0",
   "delivery": "helper",
   "entry": "wittytuner-module",
-  "api": 2,
-  "minServer": "0.4.0-alpha",
-  "maxServer": "0.5.x",
+  "api": 3,
+  "minServer": "0.6.0-alpha",
+  "maxServer": "0.6.x",
   "permissions": [
-    "network"
+    "network",
+    "programs",
+    "devices"
   ],
   "group": "tv",
   "summary": "Live TV and recording: network tuners, IPTV playlists, capture cards and guide data. Encrypted channels are refused.",
@@ -18,6 +20,6 @@
     "FFmpeg, which comes with the server",
     "A tuner or an IPTV playlist"
   ],
-  "updates": "Network tuners, IPTV over HTTP and external backends: finding them, reading their channels, scanning, and opening a stream.",
-  "stays": "Custom commands, capture cards, Linux DVB, SAT>IP and IPTV over RTSP, RTP, UDP, RTMP or SRT, which need other programs or this machine's devices, and a helper may use neither. Refusing encrypted channels also stays: the server watches every stream itself and opens HLS and DASH itself, whatever a version says. Recording and the guide stay too."
+  "updates": "All of it: every kind of tuner, finding them, reading their channels, scanning, and opening a stream.",
+  "stays": "Recording and the guide stay with the server, and so does refusing encrypted channels, on purpose: the server watches every stream itself."
 }

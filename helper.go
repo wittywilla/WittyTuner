@@ -2,6 +2,7 @@ package wittytuner
 
 import (
 	"errors"
+	"net/http"
 	"net/url"
 	"strings"
 )
@@ -16,26 +17,37 @@ type HelperCall struct {
 	Driver  string            `json:"driver,omitempty"`
 	Name    string            `json:"name,omitempty"`
 	Options map[string]string `json:"options,omitempty"`
-	Channel *Channel          `json:"channel,omitempty"` // "open"
+	Channel *Channel          `json:"channel,omitempty"` // "open" and "recheck"
 	Source  string            `json:"source,omitempty"`  // "scan": ScanOptions.Source
+	// What it can't find out for itself.
+	FFmpeg        string `json:"ffmpeg,omitempty"`
+	AllowCommands bool   `json:"allowCommands,omitempty"`
 }
 
 // HelperDoc is one document of an answer. Progress may come any number of times; any
 // other document ends the answer.
 type HelperDoc struct {
-	Progress *Progress `json:"progress,omitempty"`
-	Channels []Channel `json:"channels,omitempty"`
-	Info     *Info     `json:"info,omitempty"`
-	Found    []Found   `json:"found,omitempty"`
-	Error    string    `json:"error,omitempty"`
-	Code     string    `json:"code,omitempty"`
-	Done     bool      `json:"done,omitempty"`
+	Progress     *Progress   `json:"progress,omitempty"`
+	Channels     []Channel   `json:"channels,omitempty"`
+	Info         *Info       `json:"info,omitempty"`
+	GuideHeaders http.Header `json:"guideHeaders,omitempty"`
+	Found        []Found     `json:"found,omitempty"`
+	Drivers      []Driver    `json:"drivers,omitempty"`
+	Why          string      `json:"why,omitempty"`  // "recheck": why it's encrypted now
+	Next         int64       `json:"next,omitempty"` // "recheck": seconds until it's worth asking again
+	Error        string      `json:"error,omitempty"`
+	Code         string      `json:"code,omitempty"`
+	Done         bool        `json:"done,omitempty"`
 }
 
-// HelperOpen is the answer to "open" for a stream FFmpeg should open by itself. It is
-// a suggestion, and nothing else: the server opens and checks such a stream itself.
+// HelperOpen is the answer to "open" for a stream FFmpeg should open by itself. The server
+// holds what it asks for to its own rules before FFmpeg sees any of it.
 type HelperOpen struct {
 	Input []string `json:"input,omitempty"`
+	// Verified: it was inspected on opening and found clear. Recheck: it can change while it
+	// plays, so it's worth asking again.
+	Verified bool `json:"verified,omitempty"`
+	Recheck  bool `json:"recheck,omitempty"`
 }
 
 // CheckLocator says whether this source would use an address for a channel. A helper's
