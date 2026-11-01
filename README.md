@@ -28,7 +28,7 @@ No channel lists or stream addresses come with it. Band scans only say where a c
 
 Recording and the guide stay with the server.
 
-How to use it is in **Help** inside WittyMediaServer: see the TV guide.
+How to use it is in **Help** inside WittyMediaServer: see Channels and live TV.
 
 ## How to get it
 
