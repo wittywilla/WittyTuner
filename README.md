@@ -1,87 +1,83 @@
-<h1 align="center">WittyTuner</h1>
+# WittyTuner
 
-<p align="center">
-  <b>One way to reach every kind of TV tuner, from Go.</b><br>
-  Network tuners, IPTV, Linux DVB, capture cards, SAT&gt;IP, external backends and a custom command.
-</p>
-
-<p align="center">
-  <a href="LICENSE"><img alt="Licence: Apache-2.0" src="https://img.shields.io/badge/licence-Apache--2.0-blue.svg"></a>
-  <img alt="Go 1.26+" src="https://img.shields.io/badge/Go-1.26%2B-00ADD8.svg">
-  <img alt="No dependencies" src="https://img.shields.io/badge/dependencies-none-success.svg">
-</p>
-
-> WittyTuner is developed and released here. Issues and pull requests are welcome.
+Brings live TV into WittyMediaServer: network tuners, IPTV playlists, capture cards and guide data. You need it if you want live TV or recording.
 
 ## What it does
 
-A driver lists channels and opens one, as raw MPEG-TS or as FFmpeg input options.
+A driver lists channels and opens one, as raw MPEG-TS or as options for FFmpeg.
 
-| Driver | Reaches | Platforms | How it has been tested |
+| Driver | Reaches | Systems | How far it's been tested |
 |---|---|---|---|
-| `iptv` | M3U and M3U8 playlists (`tvg-*`, `group-title`, `url-tvg`) | all | Automated tests, and FFmpeg against local streams |
-| `stream` | One HTTP, HLS, RTSP, RTP, UDP, RTMP or SRT address | all | Automated tests, and FFmpeg against local streams |
-| `network` | HDHomeRun-style boxes: UDP and SSDP discovery, `discover.json`, `lineup.json`, the scan API, MPEG-TS over HTTP | all | Against a mock device. **Not yet on real hardware** |
-| `backend` | TV servers over open protocols: an HTTP API with M3U and XMLTV, or SVDRP | all | Against stand-in servers. **Not yet on a real server** |
-| `satip` | SAT>IP servers: SSDP, RTSP tuning | all | Protocol tests. **Untested on hardware** |
-| `dvb` | Linux DVB-T/T2, DVB-C, DVB-S/S2, ATSC, ClearQAM, ISDB-T; band-plan scans; `channels.conf` import | Linux | Parsers and band plans tested. **Untested on hardware.** No DiSEqC yet |
-| `v4l2` | Analogue tuner and capture cards | Linux | Argument tests. **Untested on hardware** |
-| `dshow` | Windows capture cards through DirectShow | Windows | Listing tested. **Untested with a card** |
-| `avfoundation` | macOS capture devices | macOS | Parser tests. **Untested** |
-| `command` | Your own program writing MPEG-TS | all | Automated tests with a test program |
-| `bda` | Windows digital tuners through BDA | | **Not built.** Listed so the gap is visible |
+| `iptv` | M3U and M3U8 playlists | All | Automated tests, and FFmpeg against local streams |
+| `stream` | One HTTP, HLS, RTSP, RTP, UDP, RTMP or SRT address | All | Automated tests, and FFmpeg against local streams |
+| `network` | HDHomeRun-style network tuner boxes | All | Against a stand-in device, not real hardware |
+| `backend` | TV servers over open protocols: an HTTP API with M3U and XMLTV, or SVDRP | All | Against stand-in servers, not a real one |
+| `satip` | SAT>IP servers | All | Protocol tests, not real hardware |
+| `dvb` | Linux DVB-T/T2, DVB-C, DVB-S/S2, ATSC, ClearQAM, ISDB-T, with band scans and `channels.conf` import | Linux | Parsers and band plans, not real hardware. No DiSEqC yet |
+| `v4l2` | Analogue tuner and capture cards | Linux | Argument tests, not real hardware |
+| `dshow` | Capture cards through DirectShow | Windows | Listing tested, not with a card |
+| `avfoundation` | Capture devices | macOS | Parser tests only |
+| `command` | Your own program writing MPEG-TS. Off unless the server is started with `WMS_TUNER_COMMANDS=1` | All | Automated tests with a test program |
+| `bda` | Digital tuners through BDA | Windows | **Not built.** Listed so the gap is visible |
 
-It also reads what is in a stream: PAT, PMT, SDT, ATSC VCT, and guide data from DVB EIT and ATSC PSIP
-(`mpegts`), plus XMLTV files as they stream by (`xmltv`).
+It also reads guide data from broadcasts (DVB EIT and ATSC PSIP) and from XMLTV files.
 
-## Encrypted and copy-protected channels
+**Encrypted and copy-protected channels are refused,** with a clear message, and nothing is decrypted. It checks lineups, stream tables, the packets themselves as they play, DRM lines in playlists, and any key line in an HLS playlist. The check applies to every driver, and there's no way to change it. The server also watches every stream itself, whatever a module says.
 
-**Nothing here decrypts or bypasses anything.** Protected channels are detected and refused with a
-clear message:
+No channel lists or stream addresses come with it. Band scans only say where a channel could be.
 
-- a `drm` tag or `DRM: 1` in a network tuner's lineup, and its "content protection required" error;
-- DTCP-IP streams, and DASH manifests with `ContentProtection`;
-- `free_CA_mode` in the SDT, CA descriptors in the PMT, `access_controlled` in the ATSC VCT;
-- `transport_scrambling_control` in the packets themselves, also mid-stream (`mpegts.Guard`);
-- DRM licence lines in a playlist, and any `#EXT-X-KEY` in an HLS playlist. FFmpeg's `crypto`
-  protocol is left off its whitelist as a second lock.
+Recording and the guide stay with the server.
 
-`wittytuner.New` applies the check to every driver, so none can leave it out, and there is no hook for
-changing it. Channels are `Checked` when their source says whether they are protected, and ATSC 3.0 is an
-ordinary channel when it isn't encrypted (the host decides what it can decode).
+How to use it is in **Help** inside WittyMediaServer: see the TV guide.
 
-No channel lists or stream addresses are included. Scans use the standard channel-to-frequency
-formulas, which say where a channel could be, not what is there.
+## How to get it
 
-## Use
+An admin adds it from the module store inside WittyMediaServer: **Settings → Modules**, then **Browse the store**, then **Add** beside WittyTuner. That needs WittyMediaServer 0.6.0-alpha or later, and it works with nothing older. The range this version fits is in `module.json`: 0.6.0-alpha through 0.6.x.
 
-```go
-env := wittytuner.Env{FFmpeg: "ffmpeg"}
-src, err := wittytuner.New("network", wittytuner.Config{
-    Name:    "Living room",
-    Options: map[string]string{"address": "192.168.1.50"},
-}, env)
-if err != nil { return err }
+## What it needs
 
-channels, err := src.Channels(ctx)
-if err != nil { return err }
+- FFmpeg, which comes with the server.
+- A tuner or an IPTV playlist.
+- [WittyModule](https://github.com/wittywilla/WittyModule), which is how a server talks to it, built in.
 
-stream, err := src.Open(ctx, channels[0])
-if err != nil { return err } // wittytuner.ErrBusy, *wittytuner.EncryptedError
-defer stream.Close()
-// stream.Reader is MPEG-TS, or stream.Input are options for FFmpeg.
+It asks the server for three permissions: network, running programs, and devices. It's written in Go with no cgo.
+
+## Platforms
+
+A program is built for each system below, and the server uses the right one.
+
+| System | Where it stands |
+|---|---|
+| Linux (x64, arm64, 32-bit ARM, x86) | Its tests pass on x64. No real tuner or capture card has been tried on any system. The other CPUs are only built |
+| Windows (x64, arm64) | Built. This version hasn't been run on Windows since it became its own program |
+| macOS (Intel, Apple silicon) | Built by the release tool. It has not been run on a real Mac |
+| FreeBSD (amd64, arm64) | Cross-compiled only. It has not been run |
+
+On macOS and FreeBSD the server has no sandbox for a module's helper: it gets a small environment and a soft memory limit, and nothing more.
+
+## Building and testing
+
+You need Go 1.26 or newer. In a worktree, first run the copy of `dev-modules.mjs` kept above the repositories (`node D:/projects/dev-modules.mjs` on the development machine). It writes a `go.work` that git ignores, so the checkout builds against the repositories beside it. Never run `go work use`.
+
+```bash
+go vet ./...
 ```
 
-`wittytuner.Drivers(env)` describes every driver and its settings, so a form can be drawn from it.
-`wittytuner.Discover(ctx, env)` looks for tuners on the network and on this machine.
+```bash
+go test ./... -count=1
+```
 
-The custom command driver runs a program, so it stays off unless the host sets
-`Env.AllowCommands` (WittyMediaServer: the `WMS_TUNER_COMMANDS=1` environment variable).
+```bash
+go run github.com/wittywilla/wittymodule/cmd/wittymodule check .
+```
+
+The last one checks the manifest. On the same tool, `pack -targets linux/amd64 -out release .` builds a release for one system. CI also builds for every system.
+
+To use it as a library, `wittytuner.New(driver, config, env)` gives a source with `Channels` and `Open`. `wittytuner.Drivers(env)` describes every driver and its settings, and `wittytuner.Discover(ctx, env)` looks for tuners. The custom command driver stays off unless the host sets `Env.AllowCommands`.
 
 ## Licence
 
-Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Developed by WittyWilla as part of
-[WittyMediaServer](https://github.com/wittywilla/WittyMediaServer).
+Apache-2.0: see [LICENSE](LICENSE) and [NOTICE](NOTICE). If you redistribute it or build on it, keep the NOTICE attribution. Each release archive carries a `THIRD-PARTY-NOTICES.txt` for what its programs link.
 
 ## Legal
 
