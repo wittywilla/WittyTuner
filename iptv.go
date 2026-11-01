@@ -553,61 +553,8 @@ type prefixed struct {
 
 func (p *prefixed) Close() error { return p.c.Close() }
 
-// hlsProtection says why an HLS playlist cannot be played, or "".
-func hlsProtection(b []byte) string {
-	sc := bufio.NewScanner(bytes.NewReader(b))
-	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
-	for sc.Scan() {
-		l := strings.TrimSpace(sc.Text())
-		if !strings.HasPrefix(l, "#EXT-X-KEY:") && !strings.HasPrefix(l, "#EXT-X-SESSION-KEY:") && !strings.HasPrefix(l, "#EXT-X-MAP:") {
-			continue
-		}
-		if strings.HasPrefix(l, "#EXT-X-MAP:") {
-			continue
-		}
-		attrs := strings.ToUpper(l)
-		if strings.Contains(attrs, "METHOD=NONE") {
-			continue
-		}
-		if strings.Contains(attrs, "KEYFORMAT") || strings.Contains(attrs, "SAMPLE-AES") {
-			return "its HLS playlist uses DRM"
-		}
-		return "its HLS playlist is encrypted"
-	}
-	return ""
-}
-
 // maxHLSVariants is more variants than a real channel has, each one a request.
 const maxHLSVariants = 32
-
-// hlsVariants finds a master playlist's streams, and what its audio and subtitle
-// renditions point at: any of them could be what FFmpeg reads.
-func hlsVariants(b []byte) []string {
-	sc := bufio.NewScanner(bytes.NewReader(b))
-	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
-	next := false
-	var out []string
-	for sc.Scan() {
-		l := strings.TrimSpace(sc.Text())
-		if strings.HasPrefix(l, "#EXT-X-STREAM-INF") {
-			next = true
-			continue
-		}
-		if strings.HasPrefix(l, "#EXT-X-MEDIA:") {
-			if m := hlsMediaURI.FindStringSubmatch(l); m != nil {
-				out = append(out, m[1])
-			}
-			continue
-		}
-		if next && l != "" && !strings.HasPrefix(l, "#") {
-			out = append(out, l)
-			next = false
-		}
-	}
-	return out
-}
-
-var hlsMediaURI = regexp.MustCompile(`URI="([^"]+)"`)
 
 // readPlaylist fetches a playlist. What arrived comes back even with an error: a key in
 // a playlist that was cut short, or came with a bad status, is still a key.
