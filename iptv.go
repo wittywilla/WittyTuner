@@ -125,10 +125,14 @@ func checkOpening(raw string, local bool) error {
 	if net.ParseIP(host) != nil {
 		return nil
 	}
+	// Go doesn't read these as addresses and the C library does, so what FFmpeg opens could be
+	// this machine: 2130706433, 127.1, 0x7f.1. No real name ends in a number.
+	if numericName(host) {
+		return errors.New("a playlist from elsewhere may not point at this server")
+	}
 	ips, err := lookupHost(strings.TrimSuffix(host, "."))
 	if err != nil {
-		// What can't be read as a name here, FFmpeg's own lookup may read as an address.
-		return errors.New("that stream's address could not be looked up")
+		return nil // it leads nowhere from here; going through a proxy, it might yet lead somewhere fine
 	}
 	for _, ip := range ips {
 		if ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() {
@@ -136,6 +140,31 @@ func checkOpening(raw string, local bool) error {
 		}
 	}
 	return nil
+}
+
+func numericName(host string) bool {
+	last := strings.TrimSuffix(host, ".")
+	if i := strings.LastIndexByte(last, '.'); i >= 0 {
+		last = last[i+1:]
+	}
+	if rest, ok := strings.CutPrefix(strings.ToLower(last), "0x"); ok {
+		last = rest
+		for _, c := range last {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+				return false
+			}
+		}
+		return true
+	}
+	if last == "" {
+		return false
+	}
+	for _, c := range last {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // noWayHome is a client that won't follow a redirect to this machine.

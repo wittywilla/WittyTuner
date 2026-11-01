@@ -76,8 +76,10 @@ func TestPlaylistFromElsewhereCantLeadHomeByName(t *testing.T) {
 			t.Errorf("%s went through", u)
 		}
 	}
-	if err := checkOpening("http://fine.example/x", false); err != nil {
-		t.Errorf("%v", err)
+	for _, u := range []string{"http://fine.example/x", "http://unknown.example/x"} {
+		if err := checkOpening(u, false); err != nil {
+			t.Errorf("%s: %v", u, err)
+		}
 	}
 	// One the owner's own network or playlist names is theirs to choose.
 	if err := checkOpening("http://sneaky.example/x", true); err != nil {
