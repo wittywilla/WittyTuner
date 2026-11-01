@@ -5,6 +5,7 @@ What changed in WittyTuner, newest first. What changed before it had a repositor
 
 ## Unreleased
 
+- A connection error says it is one, across the process line, so a server keeps what it holds off the page.
 - Every kind of tuner now runs in the helper, so there's no copy compiled into the server. It asks for permission to start programs and open this machine's devices. New calls: `validate`, `drivers` and `recheck`.
 - **Security:** only a plain `METHOD=NONE` in an HLS key line counts as no key, and a long line can't hide a key or a variant.
 - **Security:** a stream's address, which can hold a login, isn't quoted in errors.

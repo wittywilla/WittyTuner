@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"time"
@@ -156,9 +158,14 @@ func finish(w io.Writer, src wittytuner.Source, list []wittytuner.Channel, err e
 func coded(err error) error {
 	code, msg := "", err.Error()
 	var enc *wittytuner.EncryptedError
+	var ue *url.Error
+	var op *net.OpError
+	var dns *net.DNSError
 	switch {
 	case errors.As(err, &enc):
 		code, msg = "encrypted", enc.Why
+	case errors.As(err, &ue), errors.As(err, &op), errors.As(err, &dns):
+		code = "unreachable" // what it says holds what's on the network, which isn't for a page
 	case errors.Is(err, wittytuner.ErrBusy):
 		code = "busy"
 	case errors.Is(err, fs.ErrPermission):
