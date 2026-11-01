@@ -11,8 +11,7 @@
   <img alt="No dependencies" src="https://img.shields.io/badge/dependencies-none-success.svg">
 </p>
 
-> Read-only mirror of `modules/wittytuner` in [WittyMediaServer](https://github.com/wittywilla/WittyMediaServer),
-> where development happens. Please open issues and pull requests there.
+> WittyTuner is developed and released here. Issues and pull requests are welcome.
 
 ## What it does
 
