@@ -2,6 +2,22 @@
 
 Brings live TV into WittyMediaServer: network tuners, IPTV playlists, capture cards and guide data. You need it if you want live TV or recording.
 
+<!-- pictures -->
+
+![The programme guide, with a film playing in the preview](docs/images/wittytv-guide.webp)
+
+<sub>The guide, here with channels made from a library, playing [Caminandes: Llamigos](https://commons.wikimedia.org/wiki/File:Caminandes_3_-_Llamigos_-_Blender_Animated_Short.webm), Pablo Vazquez, Blender Foundation, [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). From a test server. The server's [credits list](https://github.com/wittywilla/WittyMediaServer/blob/master/docs/images/CREDITS.md) names everything shown.</sub>
+
+![The channels and tuners page in Settings](docs/images/settings-channels.webp)
+
+<sub>Settings, Channels & tuners, on a server with no tuner attached.</sub>
+
+![The recordings page](docs/images/wittytv-recordings.webp)
+
+<sub>Recordings, on a server with none yet.</sub>
+
+<!-- /pictures -->
+
 ## What it does
 
 A driver lists channels and opens one, as raw MPEG-TS or as options for FFmpeg.
