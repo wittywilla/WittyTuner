@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 WittyWilla and contributors
+
 // Package wittytuner is a common way to reach TV tuners and IPTV: network
 // tuners, M3U playlists and single streams, Linux DVB, V4L2 capture, Windows
 // and macOS capture devices, SAT>IP, external backends over open protocols and
