@@ -5,6 +5,7 @@ What changed in WittyTuner, newest first. What changed before it had a repositor
 
 ## Unreleased
 
+- **Logging:** the helper's drivers now say what they did. They log with slog's text lines on stderr, with `cat=tv`, at the level the server asks for in `WITTYMODULE_LOG` (Debug when any `WITTYMODULE_LOG_TOPICS` are on), so how a stream's FFmpeg ended, frequencies with no signal and a crashed discovery reach the server's log instead of nowhere. An IPTV provider that refuses the account, or says it's expired, banned or disabled, is a warning there, with the tuner's name and why, and never the login.
 - **WittyTuner 0.3.0:** Fits WittyMediaServer 0.8.x. Catch-up from a source's archive, and Xtream Codes-style providers.
 - **Module API 4:** it carries `sdui.json`, written from `UI()` in Go with WittyModule's `sdui` kit and kept equal to it by a test. It holds only the theme scope, `wittytuner`: live TV, the guide, recordings and the tuner settings are the server's own pages, the helper reads no settings of its own, and it has nothing a card could show, so it declares no pages, menu entries, settings or sources. Needs WittyMediaServer 0.8.0-alpha or later.
 - The server's own questions (`sdui.items`, `sdui.image`, `settings.changed`) are answered by a helper that stays for more, as the server expects, instead of one that leaves after a single answer like a tuner's question. Asking for a picture of the module's, which anyone signed in can do, no longer makes the next question look like a crash that counts towards resting the module.

@@ -172,7 +172,9 @@ func TestXtreamAccountProblems(t *testing.T) {
 				fmt.Fprint(w, tc.account)
 			}))
 			defer srv.Close()
-			s, err := New("xtream", Config{Options: map[string]string{"url": srv.URL, "username": "u", "password": "secret-pass"}}, Env{})
+			var logged bytes.Buffer
+			env := Env{Log: newHelperLog(&logged, "debug", "")}
+			s, err := New("xtream", Config{Options: map[string]string{"url": srv.URL, "username": "the-user", "password": "secret-pass"}}, env)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -182,6 +184,12 @@ func TestXtreamAccountProblems(t *testing.T) {
 			}
 			if strings.Contains(err.Error(), "secret-pass") {
 				t.Fatalf("the error shows the password: %v", err)
+			}
+			// A refusal is said where the server's owner sees it, without the login.
+			refused := tc.status != 500 && tc.name != "not a panel"
+			if got := logged.String(); refused != strings.Contains(got, "level=WARN msg=\"the IPTV provider refused the account\"") ||
+				strings.Contains(got, "secret-pass") || strings.Contains(got, "the-user") || (refused && !strings.Contains(got, "cat=tv")) {
+				t.Fatalf("logged: %s", got)
 			}
 		})
 	}

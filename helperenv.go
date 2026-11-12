@@ -6,14 +6,42 @@ package wittytuner
 import (
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
+	"os"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
+
+// helperLog is where a helper says what its drivers did: slog's text lines on stderr, which the
+// server reads back into its own log with their level, cat and session (WittyMediaServer's
+// internal/modules/proc.go). The level is the one the server asked for in WITTYMODULE_LOG; with any
+// WITTYMODULE_LOG_TOPICS on it prints Debug too, and the server keeps what the topic lets through.
+var helperLog = sync.OnceValue(func() *slog.Logger {
+	return newHelperLog(os.Stderr, os.Getenv("WITTYMODULE_LOG"), os.Getenv("WITTYMODULE_LOG_TOPICS"))
+})
+
+func newHelperLog(w io.Writer, level, topics string) *slog.Logger {
+	lv := slog.LevelInfo
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "debug":
+		lv = slog.LevelDebug
+	case "warn", "warning":
+		lv = slog.LevelWarn
+	case "error", "off":
+		lv = slog.LevelError
+	}
+	if strings.TrimSpace(topics) != "" {
+		lv = slog.LevelDebug
+	}
+	return slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: lv})).With("cat", "tv")
+}
 
 // A helper process has no one else to check where it connects, as the server does for itself. These
 // clients check each connection as it is made, on the address it really goes to, so a name that
@@ -39,7 +67,8 @@ func HelperEnv(home bool) Env {
 		}
 		return nil
 	}
-	return Env{HTTP: &http.Client{Timeout: 30 * time.Second, Transport: tr, CheckRedirect: check}, Stream: &http.Client{Transport: tr, CheckRedirect: check}}
+	return Env{HTTP: &http.Client{Timeout: 30 * time.Second, Transport: tr, CheckRedirect: check}, Stream: &http.Client{Transport: tr, CheckRedirect: check},
+		Log: helperLog()}
 }
 
 // HelperEnvFor is the Env for a call about this tuner.

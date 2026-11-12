@@ -115,6 +115,7 @@ func (x *xtream) api(ctx context.Context, action string) (*http.Response, error)
 	switch {
 	case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
 		res.Body.Close()
+		x.refused(ctx, "refused")
 		return nil, errXtreamRefused
 	case res.StatusCode != http.StatusOK:
 		res.Body.Close()
@@ -128,6 +129,12 @@ const (
 	// maxXtreamList is far more than the biggest channel list, which is read as it comes.
 	maxXtreamList = 256 << 20
 )
+
+// refused says the provider turned the account away, so the owner sees why channels stopped. Only
+// the tuner's name and why: never the login, nor the panel's address, which can carry it.
+func (x *xtream) refused(ctx context.Context, why string) {
+	x.env.logger().WarnContext(ctx, "the IPTV provider refused the account", "topic", "tuner", "tuner", x.cfg.Name, "why", why)
+}
 
 // account checks the login, and learns how many streams it may have at once.
 func (x *xtream) account(ctx context.Context) error {
@@ -144,6 +151,7 @@ func (x *xtream) account(ctx context.Context) error {
 	// empty list.
 	switch string(bytes.TrimSpace(body)) {
 	case "", "[]", "{}", "null":
+		x.refused(ctx, "refused")
 		return errXtreamRefused
 	}
 	var acct struct {
@@ -158,14 +166,18 @@ func (x *xtream) account(ctx context.Context) error {
 	}
 	u := acct.UserInfo
 	if u == nil || u.Auth == 0 {
+		x.refused(ctx, "refused")
 		return errXtreamRefused
 	}
-	switch strings.ToLower(string(u.Status)) {
+	switch st := strings.ToLower(string(u.Status)); st {
 	case "expired":
+		x.refused(ctx, st)
 		return errors.New("the provider says this account has expired")
 	case "banned":
+		x.refused(ctx, st)
 		return errors.New("the provider says this account is banned")
 	case "disabled":
+		x.refused(ctx, st)
 		return errors.New("the provider says this account is disabled")
 	}
 	x.mu.Lock()
