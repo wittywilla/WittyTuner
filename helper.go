@@ -77,6 +77,22 @@ func (s *iptv) checkLocator(locator string) error {
 	return checkStreamURL(locator, s.localPlaylist())
 }
 
+// A provider's channels stay on its own server, where the account is.
+func (x *xtream) checkLocator(locator string) error {
+	u, err := url.Parse(locator)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return errors.New("that is not a stream address")
+	}
+	base, err := url.Parse(x.base)
+	if err != nil {
+		return err
+	}
+	if !strings.EqualFold(u.Host, base.Host) {
+		return errors.New("streams stay on the provider's own server")
+	}
+	return checkStreamURL(locator, x.local)
+}
+
 func (b *backend) checkLocator(locator string) error {
 	u, err := url.Parse(locator)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {

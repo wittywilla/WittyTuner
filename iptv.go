@@ -229,6 +229,7 @@ func ParseM3U(r io.Reader) (*M3U, error) {
 	drm := ""
 	num := 0
 	first := true
+	var catchupDefaults map[string]string // from #EXTM3U, for every channel that says nothing itself
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if first {
@@ -244,6 +245,7 @@ func ParseM3U(r io.Reader) (*M3U, error) {
 					out.GuideURL, _, _ = strings.Cut(v, ",")
 				}
 			}
+			catchupDefaults = attrs
 		case strings.HasPrefix(line, "#EXTINF:"):
 			head, title := splitExtinf(line[len("#EXTINF:"):])
 			attrs := parseAttrs(head)
@@ -251,6 +253,7 @@ func ParseM3U(r io.Reader) (*M3U, error) {
 				Name: firstNonEmpty(title, attrs["tvg-name"]), EPGID: attrs["tvg-id"], Logo: webLogo(attrs["tvg-logo"]),
 				Group: attrs["group-title"], Number: firstNonEmpty(attrs["tvg-chno"], attrs["channel-number"]),
 			}}
+			cur.Catchup, cur.CatchupDays, cur.CatchupSource = m3uCatchup(attrs, catchupDefaults)
 		case strings.HasPrefix(line, "#EXTGRP:"):
 			if cur != nil && cur.Group == "" {
 				cur.Group = strings.TrimSpace(line[len("#EXTGRP:"):])
@@ -430,35 +433,46 @@ func (s *iptv) Close() error { return nil }
 // guard can watch it; HLS is checked for encryption first and handed to
 // FFmpeg, without the crypto protocol it would need to decrypt anything.
 func (s *iptv) Open(ctx context.Context, ch Channel) (*Stream, error) {
+	return openAddress(ctx, s.env, ch, s.single != "" || s.localPlaylist(), s.cfg.Options["userAgent"])
+}
+
+// openAddress opens a channel's address, or the address of what it showed earlier when
+// the host asks for that. Whichever it is, it's held to the same rules: local says
+// the owner chose where the channel list came from, so it may lead home.
+func openAddress(ctx context.Context, env Env, ch Channel, local bool, ua string) (*Stream, error) {
 	if ch.Encrypted != "" {
 		return nil, &EncryptedError{ch.Name, ch.Encrypted}
 	}
-	local := s.single != "" || s.localPlaylist()
+	if ch.ArchiveStart != 0 {
+		addr, err := ArchiveURL(ch, timeNow())
+		if err != nil {
+			return nil, err
+		}
+		ch.Locator = addr
+	}
 	if err := checkOpening(ch.Locator, local); err != nil {
 		return nil, err
 	}
 	u, _ := url.Parse(ch.Locator)
-	ua := s.cfg.Options["userAgent"]
 	switch strings.ToLower(u.Scheme) {
 	case "http", "https":
-		env := s.env
 		if !local {
 			env.HTTP, env.Stream, env.refuseHere = noWayHome(env.http()), noWayHome(env.stream()), true
 		}
 		return openHTTPStream(ctx, env, ch, ua, nil)
 	// A relay turns the rest into MPEG-TS, so the guard can read them too.
 	case "rtp", "udp":
-		return relay(ctx, s.env, []string{"-protocol_whitelist", "udp,rtp", "-i", ch.Locator})
+		return relay(ctx, env, []string{"-protocol_whitelist", "udp,rtp", "-i", ch.Locator})
 	case "rtmp", "rtmps":
-		return relay(ctx, s.env, []string{"-protocol_whitelist", "rtmp,rtmps,tcp,tls", "-i", ch.Locator})
+		return relay(ctx, env, []string{"-protocol_whitelist", "rtmp,rtmps,tcp,tls", "-i", ch.Locator})
 	case "srt":
 		// A passphrase here would have FFmpeg decrypting the stream.
 		if u.Query().Has("passphrase") {
 			return nil, &EncryptedError{ch.Name, "its address asks for a decryption passphrase"}
 		}
-		return relay(ctx, s.env, []string{"-protocol_whitelist", "srt,udp", "-i", ch.Locator})
+		return relay(ctx, env, []string{"-protocol_whitelist", "srt,udp", "-i", ch.Locator})
 	default:
-		return relay(ctx, s.env, []string{"-rtsp_transport", "tcp", "-protocol_whitelist", "rtsp,rtsps,rtp,udp,tcp,tls", "-i", ch.Locator})
+		return relay(ctx, env, []string{"-rtsp_transport", "tcp", "-protocol_whitelist", "rtsp,rtsps,rtp,udp,tcp,tls", "-i", ch.Locator})
 	}
 }
 

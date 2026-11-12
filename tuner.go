@@ -54,6 +54,16 @@ type Channel struct {
 	AudioCodec string `json:"audioCodec,omitempty"` // AC4, AC3…
 	// NoRecord is why the device says this channel may not be recorded.
 	NoRecord string `json:"noRecord,omitempty"`
+	// Catch-up: the source keeps what it showed for CatchupDays, and Catchup says how
+	// to ask for it (default, append, shift, flussonic or xc). CatchupSource is the
+	// source's own template for the address, which can hold a login as Locator can.
+	CatchupDays   int    `json:"catchupDays,omitempty"`
+	Catchup       string `json:"catchup,omitempty"`
+	CatchupSource string `json:"catchupSource,omitempty"`
+	// ArchiveStart and ArchiveEnd (Unix seconds) are set by the host, and only to ask
+	// Open for what the channel showed then instead of what it shows now.
+	ArchiveStart int64 `json:"archiveStart,omitempty"`
+	ArchiveEnd   int64 `json:"archiveEnd,omitempty"`
 }
 
 // Stream is an open channel: Reader for raw MPEG-TS, else Input for FFmpeg.

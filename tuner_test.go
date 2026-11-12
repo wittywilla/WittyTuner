@@ -820,7 +820,7 @@ func TestSplitCommand(t *testing.T) {
 }
 
 func TestDriversDescribeThemselves(t *testing.T) {
-	want := map[string]bool{"iptv": false, "stream": false, "network": false, "satip": false, "dvb": false, "v4l2": false, "dshow": false, "avfoundation": false, "bda": false, "backend": false, "command": false}
+	want := map[string]bool{"iptv": false, "stream": false, "network": false, "satip": false, "dvb": false, "v4l2": false, "dshow": false, "avfoundation": false, "bda": false, "backend": false, "command": false, "xtream": false}
 	for _, d := range Drivers(Env{}) {
 		if _, ok := want[d.ID]; !ok {
 			t.Errorf("unexpected driver %s", d.ID)
@@ -837,6 +837,9 @@ func TestDriversDescribeThemselves(t *testing.T) {
 	}
 	if len(SecretFields("backend")) != 1 {
 		t.Fatal("the backend's password is a secret")
+	}
+	if got := SecretFields("xtream"); len(got) != 1 || got[0] != "password" {
+		t.Fatalf("the provider's password is a secret: %v", got)
 	}
 	if _, err := New("nope", Config{}, Env{}); err == nil {
 		t.Fatal("unknown driver")

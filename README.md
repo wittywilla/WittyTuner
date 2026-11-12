@@ -25,6 +25,7 @@ A driver lists channels and opens one, as raw MPEG-TS or as options for FFmpeg.
 | Driver | Reaches | Systems | How far it's been tested |
 |---|---|---|---|
 | `iptv` | M3U and M3U8 playlists | All | Automated tests, and FFmpeg against local streams |
+| `xtream` | IPTV provider accounts on Xtream Codes-style panels: channels, groups, guide and catch-up | All | Against a stand-in panel, not a real provider |
 | `stream` | One HTTP, HLS, RTSP, RTP, UDP, RTMP or SRT address | All | Automated tests, and FFmpeg against local streams |
 | `network` | HDHomeRun-style network tuner boxes | All | Against a stand-in device, not real hardware |
 | `backend` | TV servers over open protocols: an HTTP API with M3U and XMLTV, or SVDRP | All | Against stand-in servers, not a real one |

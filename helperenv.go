@@ -44,7 +44,15 @@ func HelperEnv(home bool) Env {
 
 // HelperEnvFor is the Env for a call about this tuner.
 func HelperEnvFor(driver string, options map[string]string) Env {
-	return HelperEnv(driver != "iptv" || LocalPlaylist(options["playlist"]))
+	switch driver {
+	case "iptv":
+		return HelperEnv(LocalPlaylist(options["playlist"]))
+	case "xtream":
+		// A provider's panel is on the internet unless the owner put it at home.
+		base, err := xtreamServer(options["url"])
+		return HelperEnv(err == nil && LocalPlaylist(base))
+	}
+	return HelperEnv(true)
 }
 
 // Addresses a cloud host answers questions about itself on. No tuner lives there, wherever its
