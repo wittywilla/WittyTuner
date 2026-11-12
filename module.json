@@ -1,14 +1,14 @@
 {
   "id": "wittytuner",
   "name": "WittyTuner",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "repo": "wittywilla/WittyTuner",
   "license": "AGPL-3.0-or-later",
   "delivery": "helper",
   "entry": "wittytuner-module",
   "api": 3,
   "minServer": "0.6.0-alpha",
-  "maxServer": "0.6.x",
+  "maxServer": "0.8.x",
   "permissions": [
     "network",
     "programs",
