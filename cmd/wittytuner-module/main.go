@@ -18,8 +18,9 @@
 
 // Command wittytuner-module is WittyTuner as a helper process: the only way a server reaches
 // it. A process answers one question and leaves, so nothing is left running while no one is
-// watching. A server watches every stream for encryption itself, and holds what this asks
-// FFmpeg to open to its own rules. See WittyModule for the protocol.
+// watching (the server's own SDUI questions are the exception: serve.go). A server watches
+// every stream for encryption itself, and holds what this asks FFmpeg to open to its own
+// rules. See WittyModule for the protocol.
 package main
 
 import (
@@ -51,7 +52,7 @@ func main() {
 		os.Exit(2)
 	}
 	// Leaving when the server closes the pipe is what cancels whatever is under way.
-	if err := wittymodule.ServeStream(os.Stdin, os.Stdout, wittymodule.Hello{Module: m.ID, Version: m.Version, API: m.API}, handle); err != nil {
+	if err := serve(os.Stdin, os.Stdout, wittymodule.Hello{Module: m.ID, Version: m.Version, API: m.API}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

@@ -49,7 +49,7 @@ How to use it is in **Help** inside WittyMediaServer: see Channels and live TV.
 
 ## How to get it
 
-An admin adds it from the module store inside WittyMediaServer: **Settings → Modules**, then **Browse the store**, then **Add** beside WittyTuner. That needs WittyMediaServer 0.6.0-alpha or later, and it works with nothing older. The range this version fits is in `module.json`: 0.6.0-alpha through 0.8.x.
+An admin adds it from the module store inside WittyMediaServer: **Settings → Modules**, then **Browse the store**, then **Add** beside WittyTuner. This version needs WittyMediaServer 0.8.0-alpha or later, because it is built for module API 4; 0.2.0 still runs on 0.6.0-alpha and 0.7.x. The range this version fits is in `module.json`: 0.8.0-alpha through 0.8.x.
 
 ## What it needs
 
@@ -72,6 +72,16 @@ A program is built for each system below, and the server uses the right one.
 
 On macOS and FreeBSD the server has no sandbox for a module's helper: it gets a small environment and a soft memory limit, and nothing more.
 
+## In the apps
+
+Since module API 4 every module carries `sdui.json`, its part of every app as data (WittyMediaServer `docs/SDUI-MODULES.md`). WittyTuner's holds only its theme scope, `wittytuner`, named "Live TV tuners" in the theme editor. That is deliberate:
+
+- **No pages, rows or menu entries.** Live TV, the guide, recordings and Settings → Channels & tuners are the server's own pages, and they'd only appear twice.
+- **No settings.** The helper reads none of its own. Everything about a tuner comes with each call, from what the admin set up in the server's Channels & tuners.
+- **No data sources.** A tuner isn't any kind of item a card can show, finding them takes seconds while a page waits, and the helper keeps nothing between calls to answer from. The tuners it finds are for the admin adding one in the server's settings, which already asks it.
+
+The server still keeps one helper for the module's own questions, and anyone signed in can ask it for a picture by address. Those questions, unlike a tuner's, are answered by a helper that stays: it says it has no pictures and no sources, hears `settings.changed` and keeps nothing, and leaves when the server closes the pipe or stops it for being idle (`cmd/wittytuner-module/serve.go`). A helper that left after one answer would look to the server like one that crashed, and enough of those would rest the module, live TV with it. The file is written from `UI()` in `sdui.go`; after changing that, run `go test -run TestSDUIFileIsCurrent -update-sdui`, and the test keeps the two equal.
+
 ## Building and testing
 
 You need Go 1.26 or newer. In a worktree, first run the copy of `dev-modules.mjs` kept above the repositories (`node D:/projects/dev-modules.mjs` on the development machine). It writes a `go.work` that git ignores, so the checkout builds against the repositories beside it. Never run `go work use`.
@@ -88,7 +98,7 @@ go test ./... -count=1
 go run github.com/wittywilla/wittymodule/cmd/wittymodule check .
 ```
 
-The last one checks the manifest. On the same tool, `pack -targets linux/amd64 -out release .` builds a release for one system. CI also builds for every system.
+The last one checks the manifest and `sdui.json`. Until a WittyModule with the `sdui` kit is released, this builds only with the `go.work` above: `go.mod` still names v0.3.0. On the same tool, `pack -targets linux/amd64 -out release .` builds a release for one system. CI also builds for every system.
 
 To use it as a library, `wittytuner.New(driver, config, env)` gives a source with `Channels` and `Open`. `wittytuner.Drivers(env)` describes every driver and its settings, and `wittytuner.Discover(ctx, env)` looks for tuners. The custom command driver stays off unless the host sets `Env.AllowCommands`.
 
