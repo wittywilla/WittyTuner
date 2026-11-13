@@ -2,7 +2,7 @@
   "format": "wittymodule-sdui",
   "formatVersion": 1,
   "module": "wittytuner",
-  "catalog": 2,
+  "catalog": 8,
   "theme": {
     "scope": "wittytuner",
     "label": "Live TV tuners"
