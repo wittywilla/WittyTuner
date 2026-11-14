@@ -26,5 +26,13 @@
     "A tuner or an IPTV playlist"
   ],
   "updates": "All of it: every kind of tuner, finding them, reading their channels, scanning and checking them, the guide sources, opening a stream, and Settings, Live TV & tuners and the first-run step on every app.",
-  "stays": "The guide, recordings, favourites and sets stay with the server, and so does refusing encrypted channels, on purpose: the server watches every stream itself. Your tuners, channels and guide sources are WittyTuner's own, in its data folder."
+  "stays": "The guide, recordings, favourites and sets stay with the server, and so does refusing encrypted channels, on purpose: the server watches every stream itself. Your tuners, channels and guide sources are WittyTuner's own, in its data folder.",
+  "capabilities": {
+    "logTopics": [
+      "tuner|Tuning|Each tune, scan and signal report from tuners"
+    ],
+    "doctor": [
+      "channels|Are any tuners' or playlists' channels failing their health check?"
+    ]
+  }
 }

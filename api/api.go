@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -63,7 +62,7 @@ func Get() (*Manager, error) {
 		db.Close()
 		return nil, err
 	}
-	m := New(db, dir, h, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	m := New(db, dir, h, tuner.HelperLog())
 	m.learnServer(context.Background())
 	m.Start()
 	shared = m

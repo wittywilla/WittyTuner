@@ -40,5 +40,6 @@ func main() {
 		HTTP:      api.Routes,
 		Routes:    func(mux *http.ServeMux) { api.ServerRoutes(mux); api.Warm() },
 		Lifecycle: api.Lifecycle,
+		Handlers:  map[string]service.Handler{"doctor.Check": api.DoctorCheck},
 	})
 }

@@ -27,6 +27,10 @@ var helperLog = sync.OnceValue(func() *slog.Logger {
 	return newHelperLog(os.Stderr, os.Getenv("WITTYMODULE_LOG"), os.Getenv("WITTYMODULE_LOG_TOPICS"))
 })
 
+// HelperLog is the log of WittyTuner's service: stderr, which the server reads line by line, in
+// the Live TV area and at the level the server asks for.
+func HelperLog() *slog.Logger { return helperLog() }
+
 func newHelperLog(w io.Writer, level, topics string) *slog.Logger {
 	lv := slog.LevelInfo
 	switch strings.ToLower(strings.TrimSpace(level)) {
