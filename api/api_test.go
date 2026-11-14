@@ -6,6 +6,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -341,5 +342,138 @@ func TestFilesOnlyFromTheMachine(t *testing.T) {
 	var e struct{ Error string }
 	if st := h.call("POST", "/epg/sources", map[string]string{"url": "/etc/passwd"}, true, &e); st != 400 || !strings.Contains(e.Error, "own desktop") {
 		t.Fatalf("a file from elsewhere: %d %+v", st, e)
+	}
+}
+
+// The help page says only what was checked, with where it came from.
+func TestHelpOnlySaysWhatWasChecked(t *testing.T) {
+	h := EncryptedHelp()
+	if h.Checked == "" || len(h.Devices) == 0 {
+		t.Fatalf("%+v", h)
+	}
+	for _, d := range h.Devices {
+		if !strings.HasPrefix(d.URL, "https://") || d.Facts == "" || d.Source == "" {
+			t.Errorf("every device note names its source: %+v", d)
+		}
+	}
+	text := fmt.Sprintf("%+v", h)
+	for _, needle := range []string{"licensed", "ATSC 1.0", "isn't a device licensed", "support can change"} {
+		if !strings.Contains(text, needle) {
+			t.Errorf("help lacks %q", needle)
+		}
+	}
+}
+
+// A playlist from the internet names only web addresses: FFmpeg makes its own connections for the
+// rest, which nothing could hold to the internet. And who may lead home is the owner's address.
+func TestInternetPlaylistNamesOnlyWebAddresses(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	res, err := h.m.DB.ExecContext(ctx, `INSERT INTO tuners(driver, name, options, created_at) VALUES('iptv', 'Elsewhere', '{"playlist":"https://playlist.example/list.m3u"}', 1)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tid, _ := res.LastInsertId()
+	for i, addr := range []string{"rtsp://192.168.1.1:554/x", "udp://@:5000", "rtp://239.0.0.1:5004", "srt://192.168.1.1:9000"} {
+		if _, err := h.m.DB.ExecContext(ctx, `INSERT INTO tuner_channels(tuner_id, source_id, number, name, locator) VALUES(?, ?, ?, 'Live', ?)`, tid, fmt.Sprint(i), fmt.Sprint(i), addr); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, _ := h.m.Channels(ctx, tid)
+	for _, c := range list {
+		if _, err := h.m.openChannel(ctx, c.ID, 0, 0); err == nil || !strings.Contains(err.Error(), "web address") {
+			t.Errorf("%s: %v", c.locator, err)
+		}
+	}
+	for _, tc := range []struct {
+		t    Tuner
+		want bool
+	}{
+		{Tuner{Driver: "network"}, true},
+		{Tuner{Driver: "iptv", Options: map[string]string{"playlist": "/srv/list.m3u"}}, true},
+		{Tuner{Driver: "iptv", Options: map[string]string{"playlist": "http://192.168.1.2/list.m3u"}}, true},
+		{Tuner{Driver: "iptv", Options: map[string]string{"playlist": "https://iptv.example.com/list.m3u"}}, false},
+		{Tuner{Driver: "xtream", Options: map[string]string{"url": "https://panel.example.com"}}, false},
+	} {
+		if got := mayLeadHome(&tc.t); got != tc.want {
+			t.Errorf("%+v: %v", tc.t, got)
+		}
+	}
+}
+
+// Many channels at once: duplicates found, merged into backups that leave the guide, unmerged,
+// renumbered and turned off; and a backup whose channel has gone comes back by itself.
+func TestBulkAndBackups(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	add := func(name string) int64 {
+		res, err := h.m.DB.ExecContext(ctx, `INSERT INTO tuners(driver, name, options, created_at) VALUES('stream', ?, '{}', 1)`, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, _ := res.LastInsertId()
+		return id
+	}
+	a, b := add("A"), add("B")
+	ch := map[string]int64{}
+	for i, x := range []struct {
+		tuner     int64
+		num, name string
+	}{{a, "1", "One"}, {a, "2", "Same Station"}, {b, "3", "Same Station"}, {b, "4", "Four"}} {
+		res, err := h.m.DB.ExecContext(ctx, `INSERT INTO tuner_channels(tuner_id, source_id, number, name, epg_id) VALUES(?,?,?,?,?)`, x.tuner, fmt.Sprint(i), x.num, x.name, map[bool]string{true: "same.test"}[x.name == "Same Station"])
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, _ := res.LastInsertId()
+		ch[x.num] = id
+	}
+	var d struct {
+		Groups []struct {
+			Channels []struct{ ID int64 } `json:"channels"`
+		} `json:"groups"`
+	}
+	if st := h.call("GET", "/duplicates", nil, true, &d); st != 200 || len(d.Groups) != 1 || len(d.Groups[0].Channels) != 2 {
+		t.Fatalf("duplicates: %d %+v", st, d)
+	}
+	bulk := func(body map[string]any) int { return h.call("POST", "/channels/bulk", body, true, nil) }
+	if st := bulk(map[string]any{"ids": []int64{ch["3"]}, "action": "merge", "into": ch["2"]}); st != 200 {
+		t.Fatalf("merge: %d", st)
+	}
+	inGuide := func() map[int64]bool {
+		list, _ := h.m.AllChannels(ctx)
+		out := map[int64]bool{}
+		for _, c := range list {
+			if c.Enabled && c.TunerEnabled && c.MergedInto == 0 {
+				out[c.ID] = true
+			}
+		}
+		return out
+	}
+	if inGuide()[ch["3"]] {
+		t.Fatal("a backup is in the guide")
+	}
+	if st := bulk(map[string]any{"ids": []int64{ch["2"]}, "action": "merge", "into": ch["3"]}); st != 400 {
+		t.Fatalf("merging into a backup: %d", st)
+	}
+	if st := bulk(map[string]any{"ids": []int64{ch["4"], ch["1"]}, "action": "renumber", "start": "500"}); st != 200 {
+		t.Fatalf("renumber: %d", st)
+	}
+	if c, _ := h.m.Channel(ctx, ch["1"]); c.Number != "501" {
+		t.Fatalf("renumbered in the order given: %+v", c)
+	}
+	if st := bulk(map[string]any{"ids": []int64{ch["4"]}, "action": "disable"}); st != 200 || inGuide()[ch["4"]] {
+		t.Fatalf("disable: %d", st)
+	}
+	if st := bulk(map[string]any{"ids": []int64{1}, "action": "explode"}); st != 400 {
+		t.Fatalf("unknown action: %d", st)
+	}
+	if st := h.call("POST", "/channels/bulk", map[string]any{"ids": []int64{1}, "action": "disable"}, false, nil); st != 403 {
+		t.Fatalf("bulk for someone who isn't an administrator: %d", st)
+	}
+	if st := h.call("DELETE", fmt.Sprintf("/tuners/%d", a), nil, true, nil); st != 200 {
+		t.Fatalf("delete: %d", st)
+	}
+	if !inGuide()[ch["3"]] {
+		t.Fatal("the backup stayed hidden after its channel went")
 	}
 }

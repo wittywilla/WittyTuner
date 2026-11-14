@@ -185,6 +185,9 @@ type ServerChannel struct {
 	TunerName    string `json:"tunerName"`
 	Driver       string `json:"driver"`
 	TunerEnabled bool   `json:"tunerEnabled"`
+	// TunerStreams is how many channels the tuner can stream at once: the owner's limit, else the
+	// device's; 0 for no known limit. Recordings that would want more are marked as conflicts.
+	TunerStreams int `json:"tunerStreams,omitempty"`
 	// LogoURL is the source's own address for its logo, for the server to fetch and serve.
 	LogoURL string `json:"logoUrl,omitempty"`
 }
@@ -263,12 +266,36 @@ func (m *Manager) AllChannels(ctx context.Context) ([]ServerChannel, error) {
 		return nil, err
 	}
 	rows.Close()
+	limits := map[int64]int{}
+	for i := range out {
+		id := out[i].TunerID
+		if _, ok := limits[id]; !ok {
+			limits[id] = m.streamLimit(ctx, id)
+		}
+		out[i].TunerStreams = limits[id]
+	}
 	if counts, err := m.backupCounts(ctx); err == nil {
 		for _, c := range out {
 			c.Backups = counts[c.ID]
 		}
 	}
 	return out, nil
+}
+
+// streamLimit is how many channels a tuner can stream at once: the owner's limit, else what the
+// device says; 0 for no known limit.
+func (m *Manager) streamLimit(ctx context.Context, tunerID int64) int {
+	s, t, err := m.source(ctx, tunerID)
+	if err != nil {
+		if t != nil {
+			return t.MaxStreams
+		}
+		return 0
+	}
+	if t.MaxStreams > 0 {
+		return t.MaxStreams
+	}
+	return s.Info().MaxStreams
 }
 
 // codeOf names an error the server acts on.
