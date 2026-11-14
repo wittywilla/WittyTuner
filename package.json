@@ -1,0 +1,33 @@
+{
+  "name": "@wittywilla/wittytuner",
+  "version": "0.4.0",
+  "description": "The browser half of WittyTuner: Settings, Live TV & tuners, the first-run step and the encrypted-channels page, in WittyMediaServer's web app.",
+  "license": "AGPL-3.0-or-later",
+  "author": "WittyWilla (https://github.com/wittywilla)",
+  "type": "module",
+  "main": "./web/index.ts",
+  "exports": {
+    ".": "./web/index.ts"
+  },
+  "scripts": {
+    "build:bundle": "node ${WITTYMODULE:-../WittyModule}/kit/web/build-bundle.mjs .",
+    "test": "node --test scripts/test-web.mjs web/app/specs/specs.test.mjs"
+  },
+  "files": [
+    "web",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "repository": "github:wittywilla/WittyTuner",
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.7",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "vite": "^8.3.5",
+    "react-router-dom": "^7.18.5"
+  }
+}

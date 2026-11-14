@@ -24,3 +24,9 @@ import _ "embed"
 //
 //go:embed module.json
 var ManifestJSON []byte
+
+// IntegrationJSON is what this module adds to the server (module API 5: docs/MODULES-API5.md
+// in WittyMediaServer, "integration.json").
+//
+//go:embed integration.json
+var IntegrationJSON []byte

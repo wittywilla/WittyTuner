@@ -43,13 +43,13 @@ It also reads guide data from broadcasts (DVB EIT and ATSC PSIP) and from XMLTV 
 
 No channel lists or stream addresses come with it. Band scans only say where a channel could be.
 
-Recording and the guide stay with the server.
+Since 0.4.0 (module API 5) WittyTuner owns its whole part of live TV: the tuners, their channels and the guide sources are in its own database, and Settings → Live TV & tuners, the first-run step and the encrypted-channels page are its own screens. The guide, recordings, favourites and sets stay with the server, which opens every channel through WittyTuner and watches every stream itself.
 
 How to use it is in **Help** inside WittyMediaServer: see Channels and live TV.
 
 ## How to get it
 
-An admin adds it from the module store inside WittyMediaServer: **Settings → Modules**, then **Browse the store**, then **Add** beside WittyTuner. This version needs WittyMediaServer 0.8.0-alpha or later, because it is built for module API 4; 0.2.0 still runs on 0.6.0-alpha and 0.7.x. The range this version fits is in `module.json`: 0.8.0-alpha through 0.8.x.
+An admin adds it from the module store inside WittyMediaServer: **Settings → Modules**, then **Browse the store**, then **Add** beside WittyTuner. This version needs a WittyMediaServer of module API 5 (0.8.0-alpha or later). The range this version fits is in `module.json`: 0.8.0-alpha through 0.8.x.
 
 ## What it needs
 
@@ -57,7 +57,7 @@ An admin adds it from the module store inside WittyMediaServer: **Settings → M
 - A tuner or an IPTV playlist.
 - [WittyModule](https://github.com/wittywilla/WittyModule), which is how a server talks to it, built in.
 
-It asks the server for three permissions: network, running programs, and devices. It's written in Go with no cgo.
+It asks the server for four permissions: network, running programs, devices, and a data folder of its own for its database. It's written in Go with no cgo.
 
 ## Platforms
 
@@ -74,13 +74,13 @@ On macOS and FreeBSD the server has no sandbox for a module's helper: it gets a 
 
 ## In the apps
 
-Since module API 4 every module carries `sdui.json`, its part of every app as data (WittyMediaServer `docs/SDUI-MODULES.md`). WittyTuner's holds only its theme scope, `wittytuner`, named "Live TV tuners" in the theme editor. That is deliberate:
+WittyTuner is a service (module API 5: WittyMediaServer `docs/MODULES-API5.md`):
 
-- **No pages, rows or menu entries.** Live TV, the guide, recordings and Settings → Channels & tuners are the server's own pages, and they'd only appear twice.
-- **No settings.** The helper reads none of its own. Everything about a tuner comes with each call, from what the admin set up in the server's Channels & tuners.
-- **No data sources.** A tuner isn't any kind of item a card can show, finding them takes seconds while a page waits, and the helper keeps nothing between calls to answer from. The tuners it finds are for the admin adding one in the server's settings, which already asks it.
-
-The server still keeps one helper for the module's own questions, and anyone signed in can ask it for a picture by address. Those questions, unlike a tuner's, are answered by a helper that stays: it says it has no pictures and no sources, hears `settings.changed` and keeps nothing, and leaves when the server closes the pipe or stops it for being idle (`cmd/wittytuner-module/serve.go`). A helper that left after one answer would look to the server like one that crashed, and enough of those would rest the module, live TV with it. The file is written from `UI()` in `sdui.go`; after changing that, run `go test -run TestSDUIFileIsCurrent -update-sdui`, and the test keeps the two equal.
+- **Its routes** (`integration.json`, package `api`) are mounted by the server at `/api/modules/wittytuner/…`: the tuners, their channels and checks, duplicate channels, the guide sources, and the first-run step. Every one but the encrypted-channels page (`/encrypted-help`, for anyone signed in) is an administrator's.
+- **Its own routes for the server** (`/tv/…`, never a person's): every channel for the guide, opening one within its tuner's limit (MPEG-TS handed over, or an address FFmpeg opens under the server's own rules), letting it go, looking at a playlist again, and what the server's guard saw. The server never takes WittyTuner's word that a channel is clear.
+- **Its data** is a SQLite database in its own folder (package `store`): tuners, channels and guide sources. A guide source is fetched here and handed to the server (the host API's `POST /tv/guide/{source}`), which keeps the guide.
+- **`sdui.json`** (written from package `ui`; `go test ./ui -update-sdui`) has its pages for every app, the Apple TV and Android TV apps among them: the tuners with what's on this network to add, one tuner's channels, and the first-run step. Their sources are answered by the service, and every row runs one of its own commands.
+- **Its web part** (`web/`, built with WittyModule's `kit/web/build-bundle.mjs`; `npm test` checks it) is Settings → Live TV & tuners, the first-run step and the encrypted-channels page in the browser.
 
 ## Building and testing
 
@@ -98,7 +98,7 @@ go test ./... -count=1
 go run github.com/wittywilla/wittymodule/cmd/wittymodule check .
 ```
 
-The last one checks the manifest and `sdui.json`. Until a WittyModule with the `sdui` kit is released, this builds only with the `go.work` above: `go.mod` still names v0.3.0. On the same tool, `pack -targets linux/amd64 -out release .` builds a release for one system. CI also builds for every system.
+The last one checks the manifest, `integration.json` and `sdui.json`. The web part is built with `npm ci && npm run build:bundle` (WittyModule beside this checkout, or `WITTYMODULE`). On the same tool, `pack -targets linux/amd64 -out release .` builds a release for one system. CI also builds for every system.
 
 To use it as a library, `wittytuner.New(driver, config, env)` gives a source with `Channels` and `Open`. `wittytuner.Drivers(env)` describes every driver and its settings, and `wittytuner.Discover(ctx, env)` looks for tuners. The custom command driver stays off unless the host sets `Env.AllowCommands`.
 

@@ -1,18 +1,23 @@
 {
   "id": "wittytuner",
   "name": "WittyTuner",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "repo": "wittywilla/WittyTuner",
   "license": "AGPL-3.0-or-later",
   "delivery": "helper",
-  "entry": "wittytuner-module",
-  "api": 4,
+  "api": 5,
+  "dataFormat": 1,
+  "dataFrom": 1,
   "minServer": "0.8.0-alpha",
   "maxServer": "0.8.x",
+  "entry": "wittytuner-module",
+  "webEntry": "index.js",
+  "webStyle": "style.css",
   "permissions": [
     "network",
     "programs",
-    "devices"
+    "devices",
+    "data"
   ],
   "group": "tv",
   "summary": "Live TV and recording: network tuners, IPTV playlists, capture cards and guide data. Encrypted channels are refused.",
@@ -20,6 +25,6 @@
     "FFmpeg, which comes with the server",
     "A tuner or an IPTV playlist"
   ],
-  "updates": "All of it: every kind of tuner, finding them, reading their channels, scanning, and opening a stream.",
-  "stays": "Recording and the guide stay with the server, and so does refusing encrypted channels, on purpose: the server watches every stream itself."
+  "updates": "All of it: every kind of tuner, finding them, reading their channels, scanning and checking them, the guide sources, opening a stream, and Settings, Live TV & tuners and the first-run step on every app.",
+  "stays": "The guide, recordings, favourites and sets stay with the server, and so does refusing encrypted channels, on purpose: the server watches every stream itself. Your tuners, channels and guide sources are WittyTuner's own, in its data folder."
 }

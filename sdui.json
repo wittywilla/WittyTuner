@@ -6,5 +6,460 @@
   "theme": {
     "scope": "wittytuner",
     "label": "Live TV tuners"
-  }
+  },
+  "pages": [
+    {
+      "id": "wittytuner",
+      "kind": "custom",
+      "title": "Live TV & tuners",
+      "icon": "tv",
+      "description": "For administrators, on every app: the tuners, IPTV playlists and streams, the tuners on this network to add with a press, and the guide sources.",
+      "scope": "wittytuner",
+      "sections": [
+        {
+          "id": "admins",
+          "component": "Notice",
+          "props": {
+            "text": "Only an administrator adds and changes tuners.",
+            "tone": "info"
+          },
+          "when": {
+            "admin": false
+          }
+        },
+        {
+          "id": "intro",
+          "component": "Text",
+          "props": {
+            "text": "Tuners, IPTV playlists and streams put their channels in the guide beside the ones made from your library. Encrypted channels are shown as encrypted and never decrypted."
+          },
+          "when": {
+            "admin": true
+          }
+        },
+        {
+          "id": "tuners",
+          "component": "List",
+          "props": {
+            "empty": "message",
+            "emptyText": "None yet. Add one found on this network below, or in a browser.",
+            "focusable": true,
+            "title": "Tuners and IPTV"
+          },
+          "source": {
+            "type": "wittytuner.tuners"
+          },
+          "when": {
+            "admin": true
+          }
+        },
+        {
+          "id": "found",
+          "component": "List",
+          "props": {
+            "empty": "message",
+            "emptyText": "Nothing answered. A device that doesn't answer a search is added by its address, in a browser.",
+            "focusable": true,
+            "title": "Found on this network"
+          },
+          "source": {
+            "type": "wittytuner.found"
+          },
+          "when": {
+            "admin": true
+          }
+        },
+        {
+          "id": "guides",
+          "component": "List",
+          "props": {
+            "empty": "message",
+            "emptyText": "No guide sources. A tuner or provider that has its own guide adds it by itself.",
+            "focusable": true,
+            "title": "Guide data"
+          },
+          "source": {
+            "type": "wittytuner.guides"
+          },
+          "when": {
+            "admin": true
+          }
+        },
+        {
+          "id": "browser",
+          "component": "Notice",
+          "props": {
+            "text": "A playlist's address, an IPTV provider's account and a single stream are added in Settings, Live TV & tuners, in a browser.",
+            "tone": "info"
+          },
+          "when": {
+            "admin": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "wittytuner-tuner",
+      "kind": "custom",
+      "title": "{title}",
+      "icon": "tv",
+      "description": "For administrators: one tuner, what can be done to it, and its channels, each a switch for the guide. Opened with ?item=<its id>&name=<its name>.",
+      "scope": "wittytuner",
+      "sections": [
+        {
+          "id": "admins",
+          "component": "Notice",
+          "props": {
+            "text": "Only an administrator adds and changes tuners.",
+            "tone": "info"
+          },
+          "when": {
+            "admin": false
+          }
+        },
+        {
+          "id": "tuner",
+          "component": "List",
+          "props": {
+            "empty": "message",
+            "emptyText": "This tuner isn't on this server.",
+            "focusable": true,
+            "title": ""
+          },
+          "source": {
+            "tuner": "$item",
+            "type": "wittytuner.tuner"
+          },
+          "when": {
+            "admin": true
+          }
+        },
+        {
+          "id": "channels",
+          "component": "List",
+          "props": {
+            "empty": "message",
+            "emptyText": "No channels yet. Read its channels again, or scan.",
+            "focusable": true,
+            "title": "Channels"
+          },
+          "source": {
+            "tuner": "$item",
+            "type": "wittytuner.channels"
+          },
+          "when": {
+            "admin": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "wittytuner-setup",
+      "kind": "custom",
+      "title": "Set up live TV",
+      "icon": "tv",
+      "description": "WittyTuner's first-run step on every app, for administrators: the server's \"Finish setting up WittyTuner\" notice on Home opens it.",
+      "scope": "wittytuner",
+      "sections": [
+        {
+          "id": "admins",
+          "component": "Notice",
+          "props": {
+            "text": "Only an administrator adds and changes tuners.",
+            "tone": "info"
+          },
+          "when": {
+            "admin": false
+          }
+        },
+        {
+          "id": "intro",
+          "component": "Text",
+          "props": {
+            "text": "Add a TV tuner, a provider's playlist or a single stream, and its channels sit in the guide beside the ones made from your library. No channel lists or stream addresses come with the server: bring your own."
+          },
+          "when": {
+            "admin": true
+          }
+        },
+        {
+          "id": "tuners",
+          "component": "List",
+          "props": {
+            "empty": "message",
+            "emptyText": "Nothing added yet.",
+            "focusable": true,
+            "title": "Added"
+          },
+          "source": {
+            "type": "wittytuner.tuners"
+          },
+          "when": {
+            "admin": true
+          }
+        },
+        {
+          "id": "found",
+          "component": "List",
+          "props": {
+            "empty": "message",
+            "emptyText": "Nothing answered. A device that doesn't answer a search is added by its address, in a browser.",
+            "focusable": true,
+            "title": "Found on this network"
+          },
+          "source": {
+            "type": "wittytuner.found"
+          },
+          "when": {
+            "admin": true
+          }
+        },
+        {
+          "id": "browser",
+          "component": "Notice",
+          "props": {
+            "text": "A playlist's address, an IPTV provider's account and a single stream are added in Settings, Live TV & tuners, in a browser.",
+            "tone": "info"
+          },
+          "when": {
+            "admin": true
+          }
+        },
+        {
+          "id": "finish",
+          "component": "List",
+          "props": {
+            "focusable": true,
+            "title": ""
+          },
+          "source": {
+            "type": "wittytuner.setup"
+          },
+          "when": {
+            "admin": true
+          }
+        }
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "type": "wittytuner.tuners",
+      "label": "Tuners",
+      "description": "For an administrator: every tuner, playlist and stream, with how many channels it has and how it is, opening its page. Nothing for anyone else.",
+      "icon": "tv",
+      "category": "",
+      "yields": [
+        "view"
+      ],
+      "cardStyle": "tile",
+      "paged": false,
+      "title": "Tuners and IPTV",
+      "since": 8
+    },
+    {
+      "type": "wittytuner.found",
+      "label": "Tuners on this network",
+      "description": "For an administrator: the tuners that answer a search of this server's network and machine, each with a row that adds it, so no address has to be typed. It looks for a few seconds.",
+      "icon": "search",
+      "category": "",
+      "yields": [
+        "view"
+      ],
+      "cardStyle": "tile",
+      "paged": false,
+      "title": "Found on this network",
+      "since": 8
+    },
+    {
+      "type": "wittytuner.guides",
+      "label": "Guide sources",
+      "description": "For an administrator: each XMLTV guide source, when it was last read and how many programmes it gave, with rows to read it now or remove it.",
+      "icon": "calendar",
+      "category": "",
+      "yields": [
+        "view"
+      ],
+      "cardStyle": "tile",
+      "paged": false,
+      "title": "Guide data",
+      "since": 8
+    },
+    {
+      "type": "wittytuner.tuner",
+      "label": "A tuner",
+      "description": "For an administrator: one tuner, how it is (channels, encrypted ones, a scan or check under way), then what can be done: read its channels again, scan, check every channel, turn it on or off, remove it.",
+      "icon": "tv",
+      "category": "",
+      "params": [
+        {
+          "name": "tuner",
+          "type": "ref",
+          "label": "Tuner",
+          "help": "The tuner's ID, $item on its page.",
+          "required": true,
+          "since": 0
+        }
+      ],
+      "yields": [
+        "view"
+      ],
+      "cardStyle": "tile",
+      "paged": false,
+      "since": 8
+    },
+    {
+      "type": "wittytuner.channels",
+      "label": "A tuner's channels",
+      "description": "For an administrator: one tuner's channels by number, each a switch for whether it's in the guide, with whether it's encrypted or failing.",
+      "icon": "live",
+      "category": "",
+      "params": [
+        {
+          "name": "tuner",
+          "type": "ref",
+          "label": "Tuner",
+          "help": "The tuner's ID, $item on its page.",
+          "required": true,
+          "since": 0
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "label": "At most",
+          "default": 200,
+          "min": 1,
+          "max": 2000,
+          "since": 0
+        }
+      ],
+      "yields": [
+        "view"
+      ],
+      "cardStyle": "tile",
+      "paged": true,
+      "title": "Channels",
+      "since": 8
+    },
+    {
+      "type": "wittytuner.setup",
+      "label": "Finishing the first-run step",
+      "description": "For an administrator: rows to finish WittyTuner's first-run step or put it off, which tell the server to stop showing \"Finish setting up WittyTuner\". Nothing for anyone else.",
+      "icon": "check",
+      "category": "",
+      "yields": [
+        "view"
+      ],
+      "cardStyle": "tile",
+      "paged": false,
+      "since": 8
+    }
+  ],
+  "commands": [
+    {
+      "op": "wittytuner.tuner.add",
+      "label": "Add it",
+      "description": "Live TV, administrators: adds a tuner the search found on this network (item: what the search called it), and reads its channels.",
+      "method": "POST",
+      "path": "/api/modules/wittytuner/found/{item}"
+    },
+    {
+      "op": "wittytuner.tuner.refresh",
+      "label": "Read its channels again",
+      "description": "Live TV, administrators: reads a tuner's channel list again (item: its ID). What was chosen for each channel stays.",
+      "method": "POST",
+      "path": "/api/modules/wittytuner/tuners/{item}/refresh"
+    },
+    {
+      "op": "wittytuner.tuner.scan",
+      "label": "Scan for channels",
+      "description": "Live TV, administrators: has a tuner look for channels (item: its ID), which can take minutes; its page says how far it has got.",
+      "method": "POST",
+      "path": "/api/modules/wittytuner/tuners/{item}/scan",
+      "body": "{}"
+    },
+    {
+      "op": "wittytuner.tuner.check",
+      "label": "Check every channel",
+      "description": "Live TV, administrators: tunes each of a tuner's channels in turn (item: its ID), a few at a time, and keeps which ones work.",
+      "method": "POST",
+      "path": "/api/modules/wittytuner/tuners/{item}/health"
+    },
+    {
+      "op": "wittytuner.tuner.checkStop",
+      "label": "Stop checking",
+      "description": "Live TV, administrators: stops a tuner's channel check (item: its ID).",
+      "method": "DELETE",
+      "path": "/api/modules/wittytuner/tuners/{item}/health"
+    },
+    {
+      "op": "wittytuner.tuner.on",
+      "label": "Turn it on",
+      "description": "Live TV, administrators: a tuner's channels are in the guide again (item: its ID).",
+      "method": "PUT",
+      "path": "/api/modules/wittytuner/tuners/{item}",
+      "body": "{\"enabled\":true}"
+    },
+    {
+      "op": "wittytuner.tuner.off",
+      "label": "Turn it off",
+      "description": "Live TV, administrators: a tuner's channels leave the guide, and nothing is recorded from it (item: its ID).",
+      "method": "PUT",
+      "path": "/api/modules/wittytuner/tuners/{item}",
+      "body": "{\"enabled\":false}"
+    },
+    {
+      "op": "wittytuner.tuner.remove",
+      "label": "Remove",
+      "description": "Live TV, administrators: removes a tuner, its channels and its own guide source (item: its ID).",
+      "method": "DELETE",
+      "path": "/api/modules/wittytuner/tuners/{item}"
+    },
+    {
+      "op": "wittytuner.channel.show",
+      "label": "Show in the guide",
+      "description": "Live TV, administrators: a channel is in the guide (item: its ID).",
+      "method": "PUT",
+      "path": "/api/modules/wittytuner/channels/{item}",
+      "body": "{\"enabled\":true}"
+    },
+    {
+      "op": "wittytuner.channel.hide",
+      "label": "Hide from the guide",
+      "description": "Live TV, administrators: a channel leaves the guide (item: its ID).",
+      "method": "PUT",
+      "path": "/api/modules/wittytuner/channels/{item}",
+      "body": "{\"enabled\":false}"
+    },
+    {
+      "op": "wittytuner.guide.refresh",
+      "label": "Read it now",
+      "description": "Live TV, administrators: reads a guide source again now, in the background (item: its ID).",
+      "method": "POST",
+      "path": "/api/modules/wittytuner/epg/sources/{item}/refresh"
+    },
+    {
+      "op": "wittytuner.guide.remove",
+      "label": "Remove",
+      "description": "Live TV, administrators: removes a guide source (item: its ID), and what the guide kept from it.",
+      "method": "DELETE",
+      "path": "/api/modules/wittytuner/epg/sources/{item}"
+    },
+    {
+      "op": "wittytuner.setup.done",
+      "label": "Finish setting up",
+      "description": "Administrators: WittyTuner's first-run step is done, so the server stops showing \"Finish setting up WittyTuner\".",
+      "method": "POST",
+      "path": "/api/modules/wittytuner/setup/tv",
+      "body": "{\"skip\":false}"
+    },
+    {
+      "op": "wittytuner.setup.later",
+      "label": "Do this later",
+      "description": "Administrators: WittyTuner's first-run step is put off; everything in it is in Settings, Live TV & tuners.",
+      "method": "POST",
+      "path": "/api/modules/wittytuner/setup/tv",
+      "body": "{\"skip\":true}"
+    }
+  ]
 }

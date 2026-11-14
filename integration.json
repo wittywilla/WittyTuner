@@ -1,0 +1,270 @@
+{
+  "format": "wittymodule-integration",
+  "formatVersion": 1,
+  "module": "wittytuner",
+  "host": {
+    "http": ">=1",
+    "web": ">=5",
+    "sdui": ">=8",
+    "host": ">=1"
+  },
+  "http": [
+    {
+      "path": "/encrypted-help",
+      "methods": [
+        "GET"
+      ],
+      "auth": "user"
+    },
+    {
+      "path": "/drivers",
+      "methods": [
+        "GET"
+      ],
+      "auth": "admin"
+    },
+    {
+      "path": "/discover",
+      "methods": [
+        "GET"
+      ],
+      "auth": "admin",
+      "limits": {
+        "time": "30s"
+      }
+    },
+    {
+      "path": "/tuners",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "auth": "admin",
+      "limits": {
+        "body": "64KB",
+        "time": "3m"
+      }
+    },
+    {
+      "path": "/tuners/check",
+      "methods": [
+        "POST"
+      ],
+      "auth": "admin",
+      "limits": {
+        "body": "64KB",
+        "time": "2m"
+      }
+    },
+    {
+      "path": "/tuners/{id}",
+      "methods": [
+        "PUT",
+        "DELETE"
+      ],
+      "auth": "admin",
+      "limits": {
+        "body": "64KB",
+        "time": "2m"
+      }
+    },
+    {
+      "path": "/tuners/{id}/refresh",
+      "methods": [
+        "POST"
+      ],
+      "auth": "admin",
+      "limits": {
+        "time": "3m"
+      }
+    },
+    {
+      "path": "/tuners/{id}/scan",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "auth": "admin",
+      "limits": {
+        "body": "4KB"
+      }
+    },
+    {
+      "path": "/tuners/{id}/test",
+      "methods": [
+        "POST"
+      ],
+      "auth": "admin",
+      "limits": {
+        "body": "4KB",
+        "time": "2m"
+      }
+    },
+    {
+      "path": "/tuners/{id}/channels",
+      "methods": [
+        "GET"
+      ],
+      "auth": "admin",
+      "limits": {
+        "answer": "64MB"
+      }
+    },
+    {
+      "path": "/tuners/{id}/channels/enable",
+      "methods": [
+        "POST"
+      ],
+      "auth": "admin",
+      "limits": {
+        "body": "4KB"
+      }
+    },
+    {
+      "path": "/tuners/{id}/health",
+      "methods": [
+        "GET",
+        "POST",
+        "DELETE"
+      ],
+      "auth": "admin"
+    },
+    {
+      "path": "/channels/{id}",
+      "methods": [
+        "PUT"
+      ],
+      "auth": "admin",
+      "limits": {
+        "body": "8KB"
+      }
+    },
+    {
+      "path": "/channels/bulk",
+      "methods": [
+        "POST"
+      ],
+      "auth": "admin",
+      "limits": {
+        "body": "1MB",
+        "time": "3m"
+      }
+    },
+    {
+      "path": "/duplicates",
+      "methods": [
+        "GET"
+      ],
+      "auth": "admin",
+      "limits": {
+        "answer": "32MB"
+      }
+    },
+    {
+      "path": "/epg/sources",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "auth": "admin",
+      "limits": {
+        "body": "8KB"
+      }
+    },
+    {
+      "path": "/epg/sources/{id}",
+      "methods": [
+        "DELETE"
+      ],
+      "auth": "admin"
+    },
+    {
+      "path": "/epg/sources/{id}/refresh",
+      "methods": [
+        "POST"
+      ],
+      "auth": "admin"
+    },
+    {
+      "path": "/epg/ids",
+      "methods": [
+        "GET"
+      ],
+      "auth": "admin",
+      "limits": {
+        "answer": "16MB"
+      }
+    },
+    {
+      "path": "/found/{key}",
+      "methods": [
+        "POST"
+      ],
+      "auth": "admin",
+      "limits": {
+        "time": "3m"
+      }
+    },
+    {
+      "path": "/setup/tv",
+      "methods": [
+        "POST"
+      ],
+      "auth": "admin",
+      "limits": {
+        "body": "1KB"
+      }
+    }
+  ],
+  "web": {
+    "routes": [
+      {
+        "path": "/tv/encrypted",
+        "frame": "app"
+      }
+    ],
+    "settings": [
+      {
+        "id": "tuners",
+        "label": "Live TV & tuners",
+        "admin": true,
+        "after": "channels",
+        "search": [
+          "tuner",
+          "HDHomeRun",
+          "IPTV",
+          "M3U",
+          "playlist",
+          "Xtream",
+          "SAT>IP",
+          "XMLTV",
+          "guide data",
+          "EPG",
+          "encrypted channels",
+          "channel check",
+          "duplicates"
+        ]
+      }
+    ],
+    "setup": [
+      {
+        "id": "tv",
+        "title": "Live TV",
+        "after": "details",
+        "page": "wittytuner-setup",
+        "version": 1,
+        "later": {
+          "where": "Settings, Live TV & tuners",
+          "to": "/settings/tuners"
+        }
+      }
+    ]
+  },
+  "data": {
+    "store": "sqlite",
+    "backup": "settings"
+  },
+  "lifecycle": {
+    "uninstall": "ask-keep-data"
+  }
+}
