@@ -65,12 +65,12 @@ function Tuners() {
   const [setup, setSetup] = useState<{ start?: Found } | null>(null)
   const dupes = true
   const load = () => api.get<Tuner[]>(T + '/tuners').then(setList).catch((e) => { if (e.status !== 424) toast(e.message) })
-  const loadDrivers = () => { setDriversErr(''); return api.get<Driver[]>(T + '/tuners/drivers').then((d) => { setDrivers(d); setNoModule(false) }).catch((e) => { if (e.status === 424) setNoModule(true); else setDriversErr(e.message) }) }
+  const loadDrivers = () => { setDriversErr(''); return api.get<Driver[]>(T + '/drivers').then((d) => { setDrivers(d); setNoModule(false) }).catch((e) => { if (e.status === 424) setNoModule(true); else setDriversErr(e.message) }) }
   useEffect(() => { void load(); void loadDrivers() }, [])
   const search = async () => {
     setSearching(true)
     // A search that doesn't finish found nothing: Add live TV takes it by hand.
-    try { setFound(await api.get<Found[]>(T + '/tuners/discover')) } catch { setFound([]) } finally { setSearching(false) }
+    try { setFound(await api.get<Found[]>(T + '/discover')) } catch { setFound([]) } finally { setSearching(false) }
   }
   const remove = async (t: Tuner) => {
     if (!await ask({ title: `Remove “${t.name}” from this server?`, body: t.channels === 1 ? 'Its channel goes with it.' : `Its ${t.channels} channels go with it.`, confirm: 'Remove tuner', danger: true })) return
@@ -144,7 +144,7 @@ function TunerChannels({ id }: { id: string }) {
     api.get<Tuner[]>(T + '/tuners').then((l) => {
       const me = l.find((x) => String(x.id) === id) || null
       setT(me)
-      if (me) { setOpts(me.options); setLimit(String(me.maxStreams)); api.get<Driver[]>(T + '/tuners/drivers').then((d) => setDriver(d.find((x) => x.id === me.driver) || null)).catch(() => {}) }
+      if (me) { setOpts(me.options); setLimit(String(me.maxStreams)); api.get<Driver[]>(T + '/drivers').then((d) => setDriver(d.find((x) => x.id === me.driver) || null)).catch(() => {}) }
     }).catch((e) => toast(e.message))
     api.get<TunerChannel[]>(`${T}/tuners/${id}/channels`).then(setList).catch((e) => toast(e.message))
   }
