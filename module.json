@@ -1,7 +1,7 @@
 {
   "id": "wittytuner",
   "name": "WittyTuner",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "repo": "wittywilla/WittyTuner",
   "license": "AGPL-3.0-or-later",
   "delivery": "helper",

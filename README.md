@@ -8,7 +8,7 @@ It's a module of [WittyMediaServer](https://github.com/wittywilla/WittyMediaServ
 
 ![The programme guide, with a film playing in the preview](docs/images/wittytv-guide.webp)
 
-<sub>The guide, here with channels made from a library, playing [Caminandes: Llamigos](https://commons.wikimedia.org/wiki/File:Caminandes_3_-_Llamigos_-_Blender_Animated_Short.webm), Pablo Vazquez, Blender Foundation, [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). From a test server. The server's [credits list](https://github.com/wittywilla/WittyMediaServer/blob/master/docs/images/CREDITS.md) names everything shown.</sub>
+<sub>The guide, here with channels made from a library, playing [Aladdin and His Wonderful Lamp](https://commons.wikimedia.org/wiki/File:Aladdin_And_His_Wonderful_Lamp_(1939).webm), Dave Fleischer, Fleischer Studios, 1939, public domain. From a test server. The server's [credits list](https://github.com/wittywilla/WittyMediaServer/blob/master/docs/images/CREDITS.md) names everything shown.</sub>
 
 ![The channels and tuners page in Settings](docs/images/settings-channels.webp)
 

@@ -3,6 +3,10 @@
 What changed in WittyTuner, newest first. What changed before it had a repository of its own is in the
 [WittyMediaServer changelog](https://github.com/wittywilla/WittyMediaServer/blob/master/CHANGELOG.md).
 
+## 0.4.2
+
+- The README's guide and recordings pictures are retaken: two channels with schedules of their own, and longer programmes in the guide.
+
 ## 0.4.1
 
 - The README's pictures are retaken from WittyMediaServer 0.8.0-alpha.
