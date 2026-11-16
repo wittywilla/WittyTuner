@@ -2,6 +2,8 @@
 
 Brings live TV into WittyMediaServer: network tuners, IPTV playlists, capture cards and guide data. You need it if you want live TV or recording.
 
+It's a module of [WittyMediaServer](https://github.com/wittywilla/WittyMediaServer) ([wittymediaserver.com](https://wittymediaserver.com)), on module API 5.
+
 <!-- pictures -->
 
 ![The programme guide, with a film playing in the preview](docs/images/wittytv-guide.webp)
@@ -49,13 +51,13 @@ How to use it is in **Help** inside WittyMediaServer: see Channels and live TV.
 
 ## How to get it
 
-An admin adds it from the module store inside WittyMediaServer: **Settings → Modules**, then **Browse the store**, then **Add** beside WittyTuner. This version needs a WittyMediaServer of module API 5 (0.8.0-alpha or later). The range this version fits is in `module.json`: 0.8.0-alpha through 0.8.x.
+An admin adds it from the module store inside WittyMediaServer: **Settings → Modules**, then **Browse the store**, then **Add** beside WittyTuner. This version needs a WittyMediaServer of module API 5 (0.8.0-alpha or later). The range this version fits is in `module.json`: 0.8.0-alpha through 0.8.x. The server takes API 5 modules only, so older servers can't use this version. How modules work on the server is in its [docs/MODULES.md](https://github.com/wittywilla/WittyMediaServer/blob/master/docs/MODULES.md).
 
 ## What it needs
 
 - FFmpeg, which comes with the server.
 - A tuner or an IPTV playlist.
-- [WittyModule](https://github.com/wittywilla/WittyModule), which is how a server talks to it, built in.
+- [WittyModule](https://github.com/wittywilla/WittyModule) 0.5.4, which is how a server talks to it, built in.
 
 It asks the server for four permissions: network, running programs, devices, and a data folder of its own for its database. It's written in Go with no cgo.
 
@@ -84,7 +86,7 @@ WittyTuner is a service (module API 5: WittyMediaServer `docs/MODULES-API5.md`):
 
 ## Building and testing
 
-You need Go 1.26 or newer. In a worktree, first run the copy of `dev-modules.mjs` kept above the repositories (`node D:/projects/dev-modules.mjs` on the development machine). It writes a `go.work` that git ignores, so the checkout builds against the repositories beside it. Never run `go work use`.
+You need Go 1.26 or newer. In a worktree, first run WittyMediaServer's `scripts/dev-modules.mjs` (or the copy its `--root` option keeps in the folder above the repositories). It writes a `go.work` that git ignores, so the checkout builds against the repositories beside it. Never run `go work use`.
 
 ```bash
 go vet ./...
@@ -98,13 +100,25 @@ go test ./... -count=1
 go run github.com/wittywilla/wittymodule/cmd/wittymodule check .
 ```
 
-The last one checks the manifest, `integration.json` and `sdui.json`. The web part is built with `npm ci && npm run build:bundle` (WittyModule beside this checkout, or `WITTYMODULE`). On the same tool, `pack -targets linux/amd64 -out release .` builds a release for one system. CI also builds for every system.
+The last one checks the manifest, `integration.json` and `sdui.json`. The web part (`web/`) is tested and built as CI does it:
+
+```bash
+npm ci
+npm test
+npm run build:bundle
+```
+
+That builds with WittyModule's web builder (`kit/web/build-bundle.mjs`, from a WittyModule checkout beside this one, or `WITTYMODULE=<checkout>`).
+
+`go run github.com/wittywilla/wittymodule/cmd/wittymodule pack -targets linux/amd64 -out release .` builds a release for one system. CI also builds for every system.
 
 To use it as a library, `wittytuner.New(driver, config, env)` gives a source with `Channels` and `Open`. `wittytuner.Drivers(env)` describes every driver and its settings, and `wittytuner.Discover(ctx, env)` looks for tuners. The custom command driver stays off unless the host sets `Env.AllowCommands`.
 
 ## Licence
 
 GNU Affero General Public License v3.0 (or later): see [LICENSE](LICENSE) and [NOTICE](NOTICE). If you redistribute it or build on it, please keep the NOTICE attribution. Each release archive carries a `THIRD-PARTY-NOTICES.txt` for what its programs link.
+
+WittyTuner is part of the WittyMediaServer project: [server repository](https://github.com/wittywilla/WittyMediaServer), [wittymediaserver.com](https://wittymediaserver.com).
 
 ## Legal
 
