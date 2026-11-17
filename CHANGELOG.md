@@ -3,13 +3,18 @@
 What changed in WittyTuner, newest first. What changed before it had a repository of its own is in the
 [WittyMediaServer changelog](https://github.com/wittywilla/WittyMediaServer/blob/master/CHANGELOG.md).
 
+## 0.4.3
+
+- **Fixed:** the web part asked for `/tuners/drivers`, `/tuners/discover` and `/tuners/duplicates`, which the service serves as `/drivers`, `/discover` and `/duplicates`. The first-run step said "Live TV couldn't be loaded", and Settings couldn't list the kinds of tuner, search for tuners or check for duplicate channels. (#12)
+- **Fixed:** nothing checked that the paths the web part asks for are the ones `integration.json` declares, which is how #12 got through. A Go test now reads every call in `web/app` and fails on a path or method the server wouldn't pass on. (#14)
+- **Fixed:** when the first-run step can't reach WittyTuner, it says live TV can be set up later in Settings, Live TV & tuners, and setup carries on with **Set it up later** (Try again is still there), instead of "Live TV couldn't be loaded". Moving on from the step tells the server it was gone through, or put off when nothing was added (`POST /setup/tv`), so "Finish setting up WittyTuner" doesn't stay on Home. (#14)
+
 ## 0.4.2
 
 - The README's guide and recordings pictures are retaken: two channels with schedules of their own, and longer programmes in the guide.
 
 ## 0.4.1
 
-- **Fixed:** the web part asked for `/tuners/drivers`, `/tuners/discover` and `/tuners/duplicates`, which the service serves as `/drivers`, `/discover` and `/duplicates`. The first-run step said "Live TV couldn't be loaded", and Settings couldn't list the kinds of tuner, search for tuners or check for duplicate channels. (#12)
 - The README's pictures are retaken from WittyMediaServer 0.8.0-alpha.
 
 ## 0.4.0
