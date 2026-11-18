@@ -78,7 +78,7 @@ func worthFailingOver(ctx context.Context, err error) bool {
 // --------------------------------------------------------------------------
 
 // checkTime is how long one channel may take to show it works.
-const checkTime = 20 * time.Second
+const checkTime = 30 * time.Second
 
 // CheckChannel opens a channel the way watching it would, makes sure something
 // arrives, and keeps the answer. It takes a tuner while it runs, within the tuner's limit.
