@@ -164,7 +164,16 @@ type TestResult struct {
 const (
 	testListen   = 8 * time.Second
 	testMaxBytes = 4 << 20
+	// probeFileTime: FFprobe reading what the test kept (a local file, so only a busy machine is slow).
+	probeFileTime = 15 * time.Second
+	// probeLiveTime: FFprobe opening a stream itself. IPTV providers and slow tuners can take
+	// well over 20 seconds to send what it needs to name the codecs.
+	probeLiveTime = 30 * time.Second
 )
+
+// probeTimedOut is said when a channel didn't answer in time: not the same as one with no picture or sound.
+const probeTimedOut = "The channel didn't answer in time."
+
 
 // pickTestChannel is the first channel in the guide that isn't known to be encrypted, TV before radio.
 func pickTestChannel(list []*Channel) (*Channel, int) {
@@ -306,10 +315,15 @@ func (m *Manager) listen(ctx context.Context, o *opened, res *TestResult, t0 tim
 		return
 	}
 	_ = f.Close()
-	pctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	pctx, cancel := context.WithTimeout(ctx, probeFileTime)
 	defer cancel()
-	if pr, err := m.probeArgs(pctx, []string{"-i", f.Name()}); err == nil {
+	pr, perr := m.probeArgs(pctx, []string{"-i", f.Name()})
+	if perr == nil {
 		describe(pr, res)
+	} else if errors.Is(pctx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+		// Reading what arrived took too long (a busy machine): that says nothing about the channel's sound or picture.
+		res.Problem = &Problem{Kind: "unreachable", Message: probeTimedOut, Hint: "Something arrived, but it couldn't be examined in time. Try again."}
+		return
 	}
 	if res.Video == "" && res.Audio == "" && !o.Channel.Radio {
 		res.Problem = &Problem{Kind: "no-picture", Message: "Something arrived, but no picture or sound could be found in it.", Hint: "The signal may be too weak, or the channel off the air. Try another channel."}
@@ -322,7 +336,7 @@ func (m *Manager) probeInput(ctx context.Context, o *opened, res *TestResult, t0
 		res.Problem = &Problem{Kind: "other", Message: "FFmpeg is needed to try this channel."}
 		return
 	}
-	pctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	pctx, cancel := context.WithTimeout(ctx, probeLiveTime)
 	defer cancel()
 	pr, err := m.probeArgs(pctx, o.Stream.Input)
 	res.Seconds = time.Since(t0).Seconds()
@@ -337,7 +351,7 @@ func (m *Manager) probeInput(ctx context.Context, o *opened, res *TestResult, t0
 	if err != nil {
 		p := Problem{Kind: "no-picture", Message: "The stream couldn't be opened.", Hint: "Check that the address still works: providers change them. If it plays elsewhere, try again in a moment."}
 		if errors.Is(pctx.Err(), context.DeadlineExceeded) {
-			p = Problem{Kind: "unreachable", Message: "Nothing arrived from the stream in time.", Hint: "It may be off the air, or slow to start. Try again, or another channel."}
+			p = Problem{Kind: "unreachable", Message: probeTimedOut, Hint: "It may be off the air, or slow to start. Try again, or another channel."}
 		}
 		res.Problem = &p
 		return
