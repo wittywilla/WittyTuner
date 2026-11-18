@@ -9,6 +9,7 @@ What changed in WittyTuner, newest first. What changed before it had a repositor
 
 ## 0.4.1
 
+- **Fixed:** the web part asked for `/tuners/drivers`, `/tuners/discover` and `/tuners/duplicates`, which the service serves as `/drivers`, `/discover` and `/duplicates`. The first-run step said "Live TV couldn't be loaded", and Settings couldn't list the kinds of tuner, search for tuners or check for duplicate channels. (#12)
 - The README's pictures are retaken from WittyMediaServer 0.8.0-alpha.
 
 ## 0.4.0

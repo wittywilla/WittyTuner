@@ -111,7 +111,7 @@ export function Duplicates() {
   const [err, setErr] = useState('')
   const [main, setMain] = useState<Record<number, number>>({})
   const [busy, setBusy] = useState(-1)
-  const load = () => api.get<{ groups: DuplicateGroup[] }>(T + '/tuners/duplicates').then((d) => { setGroups(d.groups || []); setErr('') }).catch((e) => setErr((e as Error).message))
+  const load = () => api.get<{ groups: DuplicateGroup[] }>(T + '/duplicates').then((d) => { setGroups(d.groups || []); setErr('') }).catch((e) => setErr((e as Error).message))
   useEffect(() => { void load() }, [])
   const merge = async (g: DuplicateGroup, i: number) => {
     const into = main[i] ?? g.suggested

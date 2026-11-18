@@ -78,7 +78,7 @@ export default function TunerSetup({ drivers, start, onClose, onAdded, inSetup }
   const search = async () => {
     setSearching(true)
     try {
-      const all = await api.get<Found[]>(T + '/tuners/discover')
+      const all = await api.get<Found[]>(T + '/discover')
       const mine = all.filter((f) => choices.some((d) => d.id === f.driver))
       setFound(mine)
       announce(mine.length === 0 ? 'Nothing found. Type its details instead.' : `${mine.length} found`)

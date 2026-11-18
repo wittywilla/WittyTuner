@@ -22,7 +22,7 @@ export default function SetupStep({ info, next, back }: StepProps) {
   const [open, setOpen] = useState(false)
   const load = () => {
     setFailed(false)
-    api.get<Driver[]>(T + '/tuners/drivers').then(setDrivers).catch(() => setFailed(true))
+    api.get<Driver[]>(T + '/drivers').then(setDrivers).catch(() => setFailed(true))
     api.get<Tuner[]>(T + '/tuners').then(setTuners).catch(() => {})
   }
   useEffect(load, [])
