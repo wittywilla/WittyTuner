@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { api } from '@wms/app/api'
 import { T } from './tvApi'
 import { IconCheck, IconPlus } from '@wms/app/icons'
-import { Button, LoadError, Spinner } from '@wms/app/ui'
+import { Button, Notice, Spinner } from '@wms/app/ui'
 import TunerSetup from './TunerSetup'
 import type { Driver, Tuner } from './tvApi'
 import './tvsettings.css'
@@ -22,12 +22,27 @@ export default function SetupStep({ info, next, back }: StepProps) {
   const [open, setOpen] = useState(false)
   const load = () => {
     setFailed(false)
-    api.get<Driver[]>(T + '/tuners/drivers').then(setDrivers).catch(() => setFailed(true))
+    api.get<Driver[]>(T + '/drivers').then(setDrivers).catch(() => setFailed(true))
     api.get<Tuner[]>(T + '/tuners').then(setTuners).catch(() => {})
   }
   useEffect(load, [])
+  // Moving on tells the server the step was gone through, or put off when nothing was added, so
+  // Home doesn't ask for it again (POST /setup/tv, as the SDUI page's own Finish does).
+  const onward = () => {
+    api.post(T + '/setup/tv', { skip: tuners.length === 0 }).catch(() => { /* Home offers it again, which is all */ })
+    next()
+  }
   const head = <StepHead title="Live TV" lead="Add a TV tuner, a provider’s playlist or a single stream, and its channels sit in the guide beside the ones made from your library. Encrypted channels are shown as encrypted and never decrypted. No channel lists or stream addresses come with the server: bring your own." />
-  if (failed) return <section>{head}<LoadError what="Live TV" onRetry={load} /><StepActions back={back}><Button variant="primary" size="big" onClick={next}>Skip for now</Button></StepActions></section>
+  // What can't be asked now is set up later: setup goes on, and nothing about it is lost.
+  if (failed) return (
+    <section>
+      {head}
+      <Notice title="Live TV can’t be set up right now" action={<Button onClick={load}>Try again</Button>}>
+        WittyTuner didn’t answer. Carry on with setup, and add live TV later in Settings, Live TV &amp; tuners. Home reminds you until then.
+      </Notice>
+      <StepActions back={back}><Button variant="primary" size="big" onClick={onward}>Set it up later</Button></StepActions>
+    </section>
+  )
   if (!drivers) return <section>{head}<div className="tvs-toolbar" role="status"><Spinner /> <span className="muted">Asking WittyTuner what this server can use…</span></div></section>
   return (
     <section>
@@ -46,7 +61,7 @@ export default function SetupStep({ info, next, back }: StepProps) {
       {open && <TunerSetup drivers={drivers} inSetup onClose={() => { setOpen(false); load() }} onAdded={() => api.get<Tuner[]>(T + '/tuners').then(setTuners).catch(() => {})} />}
       <LaterNote info={info} />
       <StepActions back={back}>
-        <Button variant="primary" size="big" onClick={next}>{tuners.length ? 'Next' : 'Skip for now'}</Button>
+        <Button variant="primary" size="big" onClick={onward}>{tuners.length ? 'Next' : 'Skip for now'}</Button>
       </StepActions>
     </section>
   )
