@@ -303,7 +303,7 @@ func (x *xtream) Close() error { return nil }
 
 // Open plays a channel as an IPTV playlist's channel is played, catch-up included.
 func (x *xtream) Open(ctx context.Context, ch Channel) (*Stream, error) {
-	return openAddress(ctx, x.env, ch, x.local, x.cfg.Options["userAgent"])
+	return openAddress(ctx, x.env, ch, x.local, x.cfg.Options["userAgent"], nil)
 }
 
 // flexString is a JSON value panels send as a string one day and a number the next, or null.

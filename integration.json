@@ -196,6 +196,34 @@
       }
     },
     {
+      "path": "/epg/review",
+      "methods": [
+        "GET"
+      ],
+      "auth": "admin",
+      "limits": {
+        "answer": "16MB",
+        "time": "60s"
+      }
+    },
+    {
+      "path": "/epg/automatch",
+      "methods": [
+        "POST"
+      ],
+      "auth": "admin",
+      "limits": {
+        "time": "60s"
+      }
+    },
+    {
+      "path": "/epg/search",
+      "methods": [
+        "GET"
+      ],
+      "auth": "admin"
+    },
+    {
       "path": "/found/{key}",
       "methods": [
         "POST"

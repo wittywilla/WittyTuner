@@ -97,7 +97,8 @@ func (m *Manager) openChannel(ctx context.Context, channelID, archiveStart, arch
 		m.mu.Unlock()
 	}
 	st, err := s.Open(ctx, tuner.Channel{ID: c.SourceID, Number: c.Number, Name: c.Name, Locator: c.locator, Program: c.Program,
-		CatchupDays: c.CatchupDays, Catchup: c.catchup, CatchupSource: c.catchupSource, ArchiveStart: archiveStart, ArchiveEnd: archiveEnd})
+		CatchupDays: c.CatchupDays, Catchup: c.catchup, CatchupSource: c.catchupSource, ArchiveStart: archiveStart, ArchiveEnd: archiveEnd,
+		UserAgent: c.extra.UserAgent, Referrer: c.extra.Referrer, Alternates: c.extra.Alternates})
 	if err != nil {
 		release()
 		m.noteOpenFailure(ctx, c, err)
@@ -259,6 +260,9 @@ func (m *Manager) AllChannels(ctx context.Context) ([]ServerChannel, error) {
 		c, err := scanChannel(rows, &on)
 		if err != nil {
 			return nil, err
+		}
+		if c.MissingSince != 0 {
+			c.Enabled = false // the source no longer lists it: out of the guide while it's away
 		}
 		out = append(out, ServerChannel{Channel: c, TunerName: c.sourceName, Driver: c.driver, TunerEnabled: on != 0, LogoURL: c.Logo})
 	}

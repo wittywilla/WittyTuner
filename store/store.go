@@ -55,6 +55,19 @@ var migrations = []string{
 	   id INTEGER PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL, auth TEXT NOT NULL DEFAULT '', tuner_id INTEGER,
 	   last_fetch INTEGER, last_error TEXT NOT NULL DEFAULT '', programmes INTEGER NOT NULL DEFAULT 0,
 	   UNIQUE(url));`,
+	// 2: what a playlist says about a channel beyond its address (extra, JSON: user agent, referrer,
+	//   other addresses, language, country, guide shift); when it went missing from its source
+	//   (missing_since, kept a while so a playlist that drops it briefly loses nothing); how sure an
+	//   automatic guide match was (epg_score, 0-100), what it went by (epg_how) and the guide id the
+	//   source itself gave (epg_src, which an automatic match may have corrected); and guide matches
+	//   made by hand, by a channel's name, kept for channels that come back or are added again.
+	`ALTER TABLE tuner_channels ADD COLUMN extra TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE tuner_channels ADD COLUMN missing_since INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE tuner_channels ADD COLUMN epg_score INTEGER NOT NULL DEFAULT 0;
+	 ALTER TABLE tuner_channels ADD COLUMN epg_how TEXT NOT NULL DEFAULT '';
+	 ALTER TABLE tuner_channels ADD COLUMN epg_src TEXT NOT NULL DEFAULT '';
+	 UPDATE tuner_channels SET epg_src = epg_id;
+	 CREATE TABLE IF NOT EXISTS epg_memory (name_key TEXT PRIMARY KEY, epg_id TEXT NOT NULL, at INTEGER NOT NULL);`,
 }
 
 // DB is WittyTuner's database.
