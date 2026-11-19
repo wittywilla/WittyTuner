@@ -572,7 +572,7 @@ func (d *demoDev) handleGuide(w http.ResponseWriter, _ *http.Request) {
 		for t, i := day, 0; t.Before(day.AddDate(0, 0, 4)); t, i = t.Add(slot), i+1 {
 			title := c.topics[i%len(c.topics)]
 			if c.number == "1" {
-				title = fmt.Sprintf("%s at %s", c.topics[(t.Hour()/4)%len(c.topics)], t.Format("15:04"))
+				title = c.topics[(t.Hour()/4)%len(c.topics)]
 			}
 			doc.Programmes = append(doc.Programmes, xmltvProgramme{Start: t.Format(layout), Stop: t.Add(slot).Format(layout), Channel: id,
 				Title: title, Desc: "A demo programme on the demo tuner: made on this server, for trying live TV. Nothing here is real TV.", Category: cat})
