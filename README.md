@@ -26,7 +26,8 @@ A driver lists channels and opens one, as raw MPEG-TS or as options for FFmpeg.
 
 | Driver | Reaches | Systems | How far it's been tested |
 |---|---|---|---|
-| `iptv` | M3U and M3U8 playlists | All | Automated tests, and FFmpeg against local streams |
+| `demo` | A pretend network tuner on this computer, with test channels and a guide, for trying live TV without hardware or the internet | All | Automated tests with FFmpeg, end to end through the network tuner code |
+| `iptv` | M3U and M3U8 playlists | All | Automated tests, FFmpeg against local streams, and public test streams |
 | `xtream` | IPTV provider accounts on Xtream Codes-style panels: channels, groups, guide and catch-up | All | Against a stand-in panel, not a real provider |
 | `stream` | One HTTP, HLS, RTSP, RTP, UDP, RTMP or SRT address | All | Automated tests, and FFmpeg against local streams |
 | `network` | HDHomeRun-style network tuner boxes | All | Against a stand-in device, not real hardware |
@@ -39,7 +40,7 @@ A driver lists channels and opens one, as raw MPEG-TS or as options for FFmpeg.
 | `command` | Your own program writing MPEG-TS. Off unless the server is started with `WMS_TUNER_COMMANDS=1` | All | Automated tests with a test program |
 | `bda` | Digital tuners through BDA | Windows | **Not built.** Listed so the gap is visible |
 
-It also reads guide data from broadcasts (DVB EIT and ATSC PSIP) and from XMLTV files.
+It also reads guide data from broadcasts (DVB EIT and ATSC PSIP) and from XMLTV files, and matches channels to the guide by id, name, call sign and number with a confidence score (package `match`); the rest are listed for review in Settings.
 
 **Encrypted and copy-protected channels are refused,** with a clear message, and nothing is decrypted. It checks lineups, stream tables, the packets themselves as they play, DRM lines in playlists, and any key line in an HLS playlist. The check applies to every driver, and there's no way to change it. The server also watches every stream itself, whatever a module says.
 

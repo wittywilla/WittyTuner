@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os/exec"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -376,9 +377,11 @@ func (m *Manager) Create(ctx context.Context, t *Tuner) (*Tuner, error) {
 	if len(t.Name) > 200 {
 		return nil, errors.New("the name is too long")
 	}
-	if _, err := m.newSource(ctx, t.Driver, tuner.Config{Name: t.Name, Options: cloneMap(t.Options)}); err != nil {
+	check, err := m.newSource(ctx, t.Driver, tuner.Config{Name: t.Name, Options: cloneMap(t.Options)})
+	if err != nil {
 		return nil, err
 	}
+	_ = check.Close()
 	opts, _ := json.Marshal(t.Options)
 	res, err := m.DB.ExecContext(ctx, `INSERT INTO tuners(driver, name, options, max_streams, created_at) VALUES(?,?,?,?,?)`, t.Driver, t.Name, string(opts), max(t.MaxStreams, 0), now())
 	if err != nil {
@@ -1042,6 +1045,11 @@ func (m *Manager) noteStream(id int64, why string) {
 func (m *Manager) Discover(ctx context.Context) ([]tuner.Found, error) {
 	found := tuner.Discover(ctx, m.env("", nil))
 	tuners, _ := m.Tuners(ctx)
+	// The demo tuner is always there to add, for trying live TV with nothing else: once.
+	if !slices.ContainsFunc(tuners, func(t *Tuner) bool { return t.Driver == "demo" }) && !slices.ContainsFunc(found, func(f tuner.Found) bool { return f.Driver == "demo" }) {
+		found = append(found, tuner.Found{Driver: "demo", Name: "Demo tuner (built in)", Detail: "Pretend channels and a guide made on this server, to try live TV without a tuner or the internet",
+			Options: map[string]string{"port": tuner.DemoDefaultPort}})
+	}
 	out := []tuner.Found{}
 	for _, f := range found {
 		dup := false

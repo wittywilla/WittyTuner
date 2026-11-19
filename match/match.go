@@ -150,6 +150,10 @@ func (x *Index) Best(c Channel, n int) []Result {
 		if sim < 0.5 {
 			continue
 		}
+		// Words in the same order are a little closer: "Echo Atlas Sprt" is Echo Atlas Sport.
+		if len(words) > 0 && len(x.words[i]) > 0 && words[0] == x.words[i][0] {
+			sim = min(sim+0.03, 1)
+		}
 		s := int(sim * 85)
 		how := "similar"
 		if slices.Contains(byNum, i) {
@@ -304,6 +308,11 @@ func similarity(a, b []string) float64 {
 		}
 	}
 	d := 2 * float64(common) / float64(len(pa)+len(pb))
+	// The same words in another order are a different name ("Vista Harbor" isn't "Harbor Vista"):
+	// close, never as close as the name itself.
+	if strings.Join(a, " ") != strings.Join(b, " ") && sameWords(a, b) {
+		d = min(d, 0.9)
+	}
 	// Numbers must agree: "Channel 4" isn't "Channel 5", however alike the letters are.
 	if !sameNumbers(a, b) {
 		d *= 0.5
@@ -337,4 +346,12 @@ func sameNumbers(a, b []string) bool {
 		return strings.Join(out, " ")
 	}
 	return nums(a) == nums(b)
+}
+
+// sameWords: the same words, in any order.
+func sameWords(a, b []string) bool {
+	x, y := slices.Clone(a), slices.Clone(b)
+	slices.Sort(x)
+	slices.Sort(y)
+	return slices.Equal(x, y)
 }

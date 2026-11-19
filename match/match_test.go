@@ -51,6 +51,15 @@ func TestBest(t *testing.T) {
 			t.Errorf("Channel 4 scored %d for Channel 5", r.Score)
 		}
 	}
+	// The same words in another order lose to the name itself, so the match is still made.
+	y := New([]Entry{{ID: "a", Name: "Harbor Vista News 1"}, {ID: "b", Name: "Vista Harbor News 1"}})
+	if r, ok := Pick(y.Best(Channel{Name: "PL: Harbor Vista News 1 HD"}, 3)); !ok || r.ID != "a" {
+		t.Errorf("word order: %+v", y.Best(Channel{Name: "PL: Harbor Vista News 1 HD"}, 3))
+	}
+	// With a typo, the same order still wins.
+	if got := y.Best(Channel{Name: "Vista Harbr News 1"}, 2); len(got) < 2 || got[0].ID != "b" || got[0].Score <= got[1].Score {
+		t.Errorf("typo and order: %+v", got)
+	}
 	// Nothing alike: no sure match.
 	if r, ok := Pick(x.Best(Channel{Name: "Completely Different"}, 3)); ok {
 		t.Errorf("matched %+v", r)

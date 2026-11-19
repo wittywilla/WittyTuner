@@ -973,3 +973,18 @@ func TestOpenFallsBackToAlternatives(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 }
+
+func TestHLSWithEveryVariantGone(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/master.m3u8" {
+			w.Write([]byte("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nvideo.m3u8\n"))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	_, err := openHTTPStream(context.Background(), Env{}, Channel{Name: "X", Locator: srv.URL + "/master.m3u8"}, "", nil)
+	if err == nil || !strings.Contains(err.Error(), "isn't there") {
+		t.Fatalf("%v", err)
+	}
+}

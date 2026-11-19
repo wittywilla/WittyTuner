@@ -427,7 +427,10 @@ func demoArgs(c demoChannel) []string {
 		args = append(args, "-map", "1:a")
 	}
 	args = append(args, "-ac", "2", "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-pix_fmt", "yuv420p", "-g", "50", "-b:v", "900k",
-		"-c:a", "aac", "-b:a", "96k", "-f", "mpegts", "-mpegts_service_id", "1", "-metadata", "service_name="+c.name, "-metadata", "service_provider=WittyTuner demo", "pipe:1")
+		"-c:a", "aac", "-b:a", "96k",
+		// A broadcast's clock runs on whoever tunes in: the time of day, so a stream opened again
+		// carries on from where it was, as a recording that rejoins a channel expects.
+		"-output_ts_offset", strconv.FormatFloat(demoClock(), 'f', 3, 64), "-f", "mpegts", "-mpegts_service_id", "1", "-metadata", "service_name="+c.name, "-metadata", "service_provider=WittyTuner demo", "pipe:1")
 	return args
 }
 
@@ -596,4 +599,10 @@ func (t *demoTuner) Scan(ctx context.Context, o ScanOptions, p func(Progress)) (
 		list[i].EPGID = DemoGuideID(list[i].Number)
 	}
 	return list, err
+}
+
+// demoClock is the seconds since midnight, as the demo channels' clock.
+func demoClock() float64 {
+	t := time.Now()
+	return t.Sub(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())).Seconds()
 }

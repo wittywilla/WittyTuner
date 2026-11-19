@@ -3,6 +3,19 @@
 What changed in WittyTuner, newest first. What changed before it had a repository of its own is in the
 [WittyMediaServer changelog](https://github.com/wittywilla/WittyMediaServer/blob/master/CHANGELOG.md).
 
+## 0.4.4
+
+- **New: the demo tuner** (#19). **Add a demo tuner** in Settings, or **Try a demo tuner** in the first-run step (and on every app's setup page, among what was found), adds a pretend network tuner that runs inside WittyTuner on this computer: test-pattern channels with their name and a clock, made by the server's FFmpeg, clips from a folder you choose played in a loop, a channel marked as protected to show how encrypted channels look, and a guide of its own. Live TV, the guide, recordings and WittyTV work with no hardware and no internet. It answers the network tuner discovery and lineup protocol on `127.0.0.1`, so the real network tuner code runs end to end. Its settings choose how many tuners it has, slow tuning and a signal that drops now and then, for testing error handling. Labelled as a demo everywhere.
+- **New: matching channels to the guide** (#20). Channels are matched by guide id (whatever its case or suffix), by name (without a playlist's country tags and HD-style words, in any alphabet), by call sign and by number, each with a confidence score; sure matches are made after every guide and playlist read. **Match channels to the guide** lists channels with no guide or an unsure match, with their likeliest guide entries (one press takes one) and a search of the whole guide. A match chosen by hand is remembered by the channel's name, so a playlist added again keeps it. On a TV that page says to use a computer.
+- **New:** a guide source says how many channels it covers, how far ahead its listings go, and warns when it hasn't been read for two days or its listings run out within 12 hours.
+- **New:** a playlist's `tvg-language`, `tvg-country` and `tvg-shift`; per-channel headers from `#EXTVLCOPT:http-user-agent`/`http-referrer`, `address|User-Agent=…&Referer=…`, `#EXTHTTP` and `#KODIPROP` stream headers. The Channels page filters by group, country, language, hidden, no guide and missing, and **Show these** / **Hide these** change every channel a filter picks. (#18)
+- **Fixed:** reading a playlist again lost channels whose address had changed (a login token in it, as many providers have), with their favourites, recordings, numbers, names and guide match. A channel is now kept when its name and group say it's the same, and one that disappears is kept, hidden, for a week in case it comes back. (#18)
+- **Fixed:** the same channel listed twice in a playlist kept only the first address; the others are now its fallbacks, tried in turn when it won't open. (#18)
+- **Fixed:** two reads of one guide source at once (adding a tuner reads its guide, and so does the refresher) replaced each other's programmes and could leave the guide empty.
+- **Fixed:** errors say what to try: a 403 that the link may have expired or the provider wants a user agent or referrer, a 404 that the playlist is out of date, an HLS channel whose variants are all missing says so at once instead of leaving the player waiting, and a guide source that can't be reached says it's the guide's address. (#18)
+- **Discovery** finds network tuners that answer on another port than 80, by the address their discovery answer names (on the same machine only).
+- The web part's tests run on Windows (they imported a `D:` path instead of a file URL).
+
 ## 0.4.3
 
 - **Fixed:** the web part asked for `/tuners/drivers`, `/tuners/discover` and `/tuners/duplicates`, which the service serves as `/drivers`, `/discover` and `/duplicates`. The first-run step said "Live TV couldn't be loaded", and Settings couldn't list the kinds of tuner, search for tuners or check for duplicate channels. (#12)

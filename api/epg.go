@@ -15,6 +15,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wittywilla/wittymodule/host"
@@ -213,6 +214,19 @@ func (m *Manager) openGuide(ctx context.Context, place, auth string, client *htt
 // FetchSource reads one source now, storing only programmes of channels on
 // this server.
 func (m *Manager) FetchSource(ctx context.Context, id int64) (err error) {
+	// One read of a source at a time: two at once would each replace what the other gave the server.
+	fetchMu.Lock()
+	if fetching[id] {
+		fetchMu.Unlock()
+		return nil
+	}
+	fetching[id] = true
+	fetchMu.Unlock()
+	defer func() {
+		fetchMu.Lock()
+		delete(fetching, id)
+		fetchMu.Unlock()
+	}()
 	task := m.task("Updating the TV guide")
 	defer func() { task(1, 1, err) }()
 	var place, auth string
@@ -242,6 +256,9 @@ func (m *Manager) FetchSource(ctx context.Context, id int64) (err error) {
 	msg := ""
 	if err != nil {
 		msg = PublicError(err)
+		if msg == "the stream could not be reached" {
+			msg = "the guide's address could not be reached: check it, and that the computer it's on is on"
+		}
 	} else {
 		m.Log.InfoContext(ctx, "guide fetched", "source", id, "programmes", n, "took", time.Since(began).Round(time.Millisecond).String())
 		// What the guide now has may match channels that had none.
@@ -252,6 +269,11 @@ func (m *Manager) FetchSource(ctx context.Context, id int64) (err error) {
 	_, _ = m.DB.ExecContext(ctx, `UPDATE epg_sources SET last_error = ?, last_fetch = ?, programmes = ? WHERE id = ?`, msg, now(), n, id)
 	return err
 }
+
+var (
+	fetchMu  sync.Mutex
+	fetching = map[int64]bool{}
+)
 
 // guideClient reaches a guide source: anywhere but a cloud host's own addresses for one at
 // home, and only the internet for one from the internet.

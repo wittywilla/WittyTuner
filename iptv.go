@@ -705,6 +705,7 @@ func openHTTPStream(ctx context.Context, env Env, ch Channel, ua string, headers
 		if len(variants) > maxHLSVariants {
 			variants, whole = variants[:maxHLSVariants], false
 		}
+		gone := 0 // variants the stream's server says aren't there
 		for _, v := range variants {
 			if env.refuseHere {
 				bu, err := url.Parse(ch.Locator)
@@ -716,11 +717,18 @@ func openHTTPStream(ctx context.Context, env Env, ch Channel, ua string, headers
 					}
 				}
 			}
-			why, read := checkVariant(ctx, env, ch.Locator, v, ua, headers)
+			why, read, status := checkVariant(ctx, env, ch.Locator, v, ua, headers)
 			if why != "" {
 				return nil, &EncryptedError{ch.Name, why}
 			}
+			if status == http.StatusNotFound || status == http.StatusGone {
+				gone++
+			}
 			whole = whole && read
+		}
+		// Every picture it offers is missing: say so now, rather than leave a player waiting.
+		if len(variants) > 0 && gone == len(variants) {
+			return nil, fmt.Errorf("the channel's playlist names video that isn't there (404). The channel may be off the air, or its address out of date")
 		}
 		return &Stream{Input: httpInput(ch.Locator, ua, headers), Verified: whole, Recheck: hlsRecheck(env, ch.Locator, ua, headers)}, nil
 	}
@@ -765,7 +773,7 @@ func readPlaylist(ctx context.Context, env Env, addr, ua string, headers http.He
 	case err != nil:
 		return b, err
 	case res.StatusCode != http.StatusOK:
-		return b, fmt.Errorf("the playlist answered %s", res.Status)
+		return b, statusError(res.StatusCode)
 	case len(b) >= maxPlaylistRead:
 		return b, errors.New("the playlist is too long to read")
 	}
@@ -789,16 +797,27 @@ func variantURL(base, v string) (string, bool) {
 
 // checkVariant says why one variant can't be played, or "", and whether it was read:
 // one that wasn't has said nothing either way.
-func checkVariant(ctx context.Context, env Env, base, v, ua string, headers http.Header) (why string, read bool) {
+func checkVariant(ctx context.Context, env Env, base, v, ua string, headers http.Header) (why string, read bool, status int) {
 	addr, ok := variantURL(base, v)
 	if !ok {
-		return "", false
+		return "", false, 0
 	}
 	b, err := readPlaylist(ctx, env, addr, ua, headers)
 	if why := hlsProtection(b); why != "" {
-		return why, true
+		return why, true, 0
 	}
-	return "", err == nil
+	var se statusError
+	if errors.As(err, &se) {
+		status = int(se)
+	}
+	return "", err == nil, status
+}
+
+// statusError is a playlist's answer that wasn't 200.
+type statusError int
+
+func (e statusError) Error() string {
+	return fmt.Sprintf("the playlist answered %d %s", int(e), http.StatusText(int(e)))
 }
 
 // How often a live playlist is read again: as often as it changes, which its target

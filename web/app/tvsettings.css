@@ -119,3 +119,17 @@
 .tvs-help-devices { list-style: none; padding: 0; display: grid; gap: 12px; }
 .tvs-help-devices li > div { display: flex; flex-direction: column; gap: 2px; padding: 12px; border-radius: var(--r-md); background: var(--bg-2); }
 .tvs-announce { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Match to the guide */
+.tvs-review { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.tvs-review-row { border: 1px solid var(--line); border-radius: var(--radius, 10px); padding: 10px 12px; background: var(--card, transparent); }
+.tvs-review-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.tvs-review-state { font-size: .85em; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); }
+.tvs-review-state.none { color: var(--danger, #b42318); border-color: currentColor; }
+.tvs-review-state.unsure { color: var(--warn, #9a6700); border-color: currentColor; }
+.tvs-review-state.matched { color: var(--ok, #1a7f37); border-color: currentColor; }
+.tvs-review-picks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tvs-review-find { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
+.tvs-review-find .input { flex: 1; min-width: 0; max-width: 360px; }
+.tvs-check { display: inline-flex; gap: 6px; align-items: center; margin-right: 12px; white-space: nowrap; }
+.tvs-toolbar select.input { width: auto; max-width: 14em; }
