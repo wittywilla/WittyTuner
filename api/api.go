@@ -96,6 +96,7 @@ func (m *Manager) learnServer(ctx context.Context) {
 	defer cancel()
 	if t, err := m.Host.Tools(ctx); err == nil {
 		m.FFmpeg, m.FFprobe = t.FFmpeg, t.FFprobe
+		tuner.SetDemoFFmpeg(m.FFmpeg, nil)
 	}
 	if h, err := m.Host.Hello(ctx); err == nil {
 		m.AllowCommands = h.Machine["tunerCommands"]
@@ -170,6 +171,9 @@ func Routes(mux *http.ServeMux) {
 	mux.Handle("DELETE /epg/sources/{id}", ad(handleDeleteEPGSource))
 	mux.Handle("POST /epg/sources/{id}/refresh", ad(handleRefreshEPGSource))
 	mux.Handle("GET /epg/ids", ad(handleEPGIDs))
+	mux.Handle("GET /epg/review", ad(handleReview))
+	mux.Handle("POST /epg/automatch", ad(handleAutoMatch))
+	mux.Handle("GET /epg/search", ad(handleGuideSearch))
 	mux.Handle("POST /found/{key}", ad(handleAddFound))
 	mux.Handle("POST /setup/tv", ad(handleSetupTV))
 }
@@ -687,6 +691,7 @@ func handleEPGSources(m *Manager, w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
+	m.guideFreshness(r.Context(), list)
 	writeJSON(w, 200, list)
 }
 

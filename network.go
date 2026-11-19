@@ -402,7 +402,8 @@ func discoverNetworkTuners(ctx context.Context, env Env) []Found {
 	if conn, err := net.ListenPacket("udp4", ":0"); err == nil {
 		defer conn.Close()
 		req := hdhrDiscoverRequest()
-		for _, dst := range broadcastAddrs() {
+		// This machine too: a tuner emulated here (the demo tuner) doesn't hear a broadcast.
+		for _, dst := range append(broadcastAddrs(), net.IPv4(127, 0, 0, 1)) {
 			_, _ = conn.WriteTo(req, &net.UDPAddr{IP: dst, Port: hdhrPort})
 		}
 		_ = conn.SetReadDeadline(time.Now().Add(1500 * time.Millisecond))
@@ -412,9 +413,9 @@ func discoverNetworkTuners(ctx context.Context, env Env) []Found {
 			if err != nil {
 				break
 			}
-			if _, ok := parseHDHRReply(buf[:n]); ok {
+			if rep, ok := parseHDHRReply(buf[:n]); ok {
 				if u, ok := from.(*net.UDPAddr); ok && lanHost(u.IP.String()) {
-					hosts[u.IP.String()] = true
+					hosts[replyHost(rep, u)] = true
 				}
 			}
 		}
@@ -433,10 +434,40 @@ func discoverNetworkTuners(ctx context.Context, env Env) []Found {
 		if err != nil || (d.DeviceID == "" && d.ModelNumber == "") {
 			continue
 		}
+		if d.ModelNumber == DemoModel {
+			if _, port, err := net.SplitHostPort(h); err == nil {
+				out = append(out, Found{Driver: "demo", Name: "Demo tuner (built in)", Detail: fmt.Sprintf("Pretend channels made on this server, %d tuners", d.TunerCount),
+					Options: map[string]string{"port": port}})
+			}
+			continue
+		}
 		out = append(out, Found{Driver: "network", Name: firstNonEmpty(d.FriendlyName, "Network tuner"),
 			Detail: fmt.Sprintf("%s, %d tuners, %s", d.ModelNumber, d.TunerCount, h), Options: map[string]string{"address": h}})
 	}
 	return out
+}
+
+// replyHost is where to ask a device that answered discovery: its own address, with the port its
+// base URL names when that URL is the same machine (a device emulated on another port). An answer
+// can't send the question anywhere else.
+func replyHost(r hdhrReply, from *net.UDPAddr) string {
+	ip := from.IP.String()
+	if r.baseURL == "" {
+		return ip
+	}
+	u, err := url.Parse(r.baseURL)
+	if err != nil || u.Scheme != "http" || u.User != nil {
+		return ip
+	}
+	host, err := netip.ParseAddr(u.Hostname())
+	sender, ok := netip.AddrFromSlice(from.IP)
+	if err != nil || !ok || host.Unmap() != sender.Unmap() {
+		return ip
+	}
+	if p := u.Port(); p != "" && p != "80" {
+		return net.JoinHostPort(ip, p)
+	}
+	return ip
 }
 
 func broadcastAddrs() []net.IP {

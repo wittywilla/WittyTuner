@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -119,7 +120,7 @@ func TestXtreamChannels(t *testing.T) {
 		{ID: "104", Number: "8", Name: "No archive days", Locator: live("104")},
 		{ID: "105", Number: "9", Name: "Odd fields", Locator: live("105")},
 	} {
-		if list[i] != want {
+		if !reflect.DeepEqual(list[i], want) {
 			t.Errorf("channel %d:\n got %+v\nwant %+v", i, list[i], want)
 		}
 	}

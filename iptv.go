@@ -11,6 +11,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -230,6 +232,8 @@ func ParseM3U(r io.Reader) (*M3U, error) {
 	num := 0
 	first := true
 	var catchupDefaults map[string]string // from #EXTM3U, for every channel that says nothing itself
+	// What #EXTVLCOPT, #KODIPROP and #EXTHTTP lines say about the next address.
+	var ua, ref string
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if first {
@@ -254,6 +258,14 @@ func ParseM3U(r io.Reader) (*M3U, error) {
 				Group: attrs["group-title"], Number: firstNonEmpty(attrs["tvg-chno"], attrs["channel-number"]),
 			}}
 			cur.Catchup, cur.CatchupDays, cur.CatchupSource = m3uCatchup(attrs, catchupDefaults)
+			cur.Language, cur.Country = clipAttr(attrs["tvg-language"]), clipAttr(attrs["tvg-country"])
+			cur.GuideShift = guideShift(firstNonEmpty(attrs["tvg-shift"], catchupDefaults["tvg-shift"]))
+			if v := firstNonEmpty(attrs["user-agent"], attrs["http-user-agent"]); v != "" {
+				ua = v
+			}
+			if v := firstNonEmpty(attrs["http-referrer"], attrs["http-referer"], attrs["referrer"]); v != "" {
+				ref = v
+			}
 		case strings.HasPrefix(line, "#EXTGRP:"):
 			if cur != nil && cur.Group == "" {
 				cur.Group = strings.TrimSpace(line[len("#EXTGRP:"):])
@@ -264,10 +276,21 @@ func ParseM3U(r io.Reader) (*M3U, error) {
 			if strings.Contains(l, "license_key") || strings.Contains(l, "license_type") || strings.Contains(l, "widevine") || strings.Contains(l, "playready") || strings.Contains(l, "fairplay") || strings.Contains(l, "clearkey") || strings.Contains(l, "drm") {
 				drm = "the playlist lists a DRM licence for it"
 			}
+			if u, r := m3uHeaders(line); u != "" || r != "" {
+				ua, ref = firstNonEmpty(u, ua), firstNonEmpty(r, ref)
+			}
 		default:
 			if cur == nil {
 				cur = &M3UEntry{}
 			}
+			// "address|User-Agent=…&Referer=…" names its headers after the address.
+			if addr, opts, ok := strings.Cut(line, "|"); ok && strings.Contains(addr, "://") {
+				line = strings.TrimSpace(addr)
+				u, r := pipeHeaders(opts)
+				ua, ref = firstNonEmpty(u, ua), firstNonEmpty(r, ref)
+			}
+			cur.UserAgent, cur.Referrer = clipHeader(ua), clipHeader(ref)
+			ua, ref = "", ""
 			cur.URL = line
 			if cur.Name == "" {
 				cur.Name = line
@@ -287,6 +310,92 @@ func ParseM3U(r io.Reader) (*M3U, error) {
 		}
 	}
 	return out, sc.Err()
+}
+
+// clipAttr keeps a playlist's word about a channel short.
+func clipAttr(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) > 80 {
+		s = s[:80]
+	}
+	return s
+}
+
+// clipHeader keeps a header value to one short line: a playlist can't add headers of its own
+// by hiding a line break in one.
+func clipHeader(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexAny(s, "\r\n\x00"); i >= 0 {
+		s = s[:i]
+	}
+	if len(s) > 512 {
+		s = s[:512]
+	}
+	return s
+}
+
+// guideShift reads tvg-shift, in hours ("-1", "+2", "5.5"), as minutes within a day.
+func guideShift(v string) int {
+	f, err := strconv.ParseFloat(strings.TrimSpace(strings.Replace(v, ",", ".", 1)), 64)
+	if err != nil || f < -24 || f > 24 {
+		return 0
+	}
+	return int(f * 60)
+}
+
+// m3uHeaders reads the user agent and referrer a comment line sets for the next address:
+// #EXTVLCOPT:http-user-agent=…, #EXTVLCOPT:http-referrer=…, #KODIPROP's stream_headers and
+// #EXTHTTP:{"User-Agent": …}.
+func m3uHeaders(line string) (ua, ref string) {
+	tag, rest, ok := strings.Cut(line, ":")
+	if !ok {
+		return "", ""
+	}
+	switch strings.ToUpper(tag) {
+	case "#EXTVLCOPT":
+		k, v, _ := strings.Cut(rest, "=")
+		switch strings.ToLower(strings.TrimSpace(k)) {
+		case "http-user-agent":
+			return v, ""
+		case "http-referrer", "http-referer":
+			return "", v
+		}
+	case "#KODIPROP":
+		k, v, _ := strings.Cut(rest, "=")
+		if strings.HasSuffix(strings.ToLower(strings.TrimSpace(k)), ".stream_headers") {
+			return pipeHeaders(v)
+		}
+	case "#EXTHTTP":
+		var h map[string]string
+		if json.Unmarshal([]byte(rest), &h) == nil {
+			for k, v := range h {
+				switch strings.ToLower(k) {
+				case "user-agent":
+					ua = v
+				case "referer", "referrer":
+					ref = v
+				}
+			}
+		}
+	}
+	return ua, ref
+}
+
+// pipeHeaders reads "User-Agent=…&Referer=…", as written after an address's "|".
+func pipeHeaders(s string) (ua, ref string) {
+	for _, part := range strings.Split(s, "&") {
+		k, v, _ := strings.Cut(part, "=")
+		if dv, err := url.QueryUnescape(v); err == nil {
+			v = dv
+		}
+		switch strings.ToLower(strings.TrimSpace(k)) {
+		case "user-agent":
+			ua = v
+		case "referer", "referrer":
+			ref = v
+		}
+	}
+	return ua, ref
 }
 
 func idOf(s string) string {
@@ -411,10 +520,20 @@ func (s *iptv) Channels(ctx context.Context) ([]Channel, error) {
 	s.guide = m.GuideURL
 	local := s.localPlaylist()
 	out := make([]Channel, 0, len(m.Entries))
+	at := make(map[string]int, len(m.Entries))
 	for _, e := range m.Entries {
 		if checkStreamURL(e.URL, local) != nil {
 			continue
 		}
+		// The same channel listed again at another address is a fallback for it, tried when the
+		// first won't open, rather than a second channel of the same name.
+		if i, ok := at[e.ID]; ok {
+			if e.URL != out[i].Locator && len(out[i].Alternates) < maxAlternates && !slices.Contains(out[i].Alternates, e.URL) {
+				out[i].Alternates = append(out[i].Alternates, e.URL)
+			}
+			continue
+		}
+		at[e.ID] = len(out)
 		out = append(out, e.Channel)
 	}
 	if len(out) == 0 {
@@ -433,13 +552,44 @@ func (s *iptv) Close() error { return nil }
 // guard can watch it; HLS is checked for encryption first and handed to
 // FFmpeg, without the crypto protocol it would need to decrypt anything.
 func (s *iptv) Open(ctx context.Context, ch Channel) (*Stream, error) {
-	return openAddress(ctx, s.env, ch, s.single != "" || s.localPlaylist(), s.cfg.Options["userAgent"])
+	local := s.single != "" || s.localPlaylist()
+	// The tuner's own user agent is for the playlist; one the playlist names for a channel wins.
+	ua := firstNonEmpty(ch.UserAgent, s.cfg.Options["userAgent"])
+	var headers http.Header
+	if ch.Referrer != "" {
+		headers = http.Header{"Referer": {ch.Referrer}}
+	}
+	st, err := openAddress(ctx, s.env, ch, local, ua, headers)
+	if err == nil || ch.ArchiveStart != 0 {
+		return st, err
+	}
+	// Other addresses for the same channel, in the playlist's order, when the first one is down.
+	// An encrypted stream is never a reason to look elsewhere: it is the answer.
+	first := err
+	for _, alt := range ch.Alternates {
+		if IsEncrypted(err) || ctx.Err() != nil {
+			break
+		}
+		c := ch
+		c.Locator = alt
+		if st, err = openAddress(ctx, s.env, c, local, ua, headers); err == nil {
+			s.env.logger().InfoContext(ctx, "a channel's first address didn't open, so another one is playing", "topic", "tuner", "channel", ch.Name, "why", first)
+			return st, nil
+		}
+	}
+	if IsEncrypted(err) {
+		return nil, err
+	}
+	return nil, first
 }
+
+// maxAlternates is how many other addresses one channel keeps.
+const maxAlternates = 4
 
 // openAddress opens a channel's address, or the address of what it showed earlier when
 // the host asks for that. Whichever it is, it's held to the same rules: local says
 // the owner chose where the channel list came from, so it may lead home.
-func openAddress(ctx context.Context, env Env, ch Channel, local bool, ua string) (*Stream, error) {
+func openAddress(ctx context.Context, env Env, ch Channel, local bool, ua string, headers http.Header) (*Stream, error) {
 	if ch.Encrypted != "" {
 		return nil, &EncryptedError{ch.Name, ch.Encrypted}
 	}
@@ -459,7 +609,7 @@ func openAddress(ctx context.Context, env Env, ch Channel, local bool, ua string
 		if !local {
 			env.HTTP, env.Stream, env.refuseHere = noWayHome(env.http()), noWayHome(env.stream()), true
 		}
-		return openHTTPStream(ctx, env, ch, ua, nil)
+		return openHTTPStream(ctx, env, ch, ua, headers)
 	// A relay turns the rest into MPEG-TS, so the guard can read them too.
 	case "rtp", "udp":
 		return relay(ctx, env, []string{"-protocol_whitelist", "udp,rtp", "-i", ch.Locator})
@@ -520,7 +670,7 @@ func openHTTPStream(ctx context.Context, env Env, ch Channel, ua string, headers
 	}
 	if res.StatusCode != 200 {
 		res.Body.Close()
-		return nil, fmt.Errorf("the stream answered %s", res.Status)
+		return nil, streamStatusError(res.Status, res.StatusCode)
 	}
 	head := make([]byte, 4096)
 	n, _ := io.ReadFull(res.Body, head)
@@ -555,6 +705,7 @@ func openHTTPStream(ctx context.Context, env Env, ch Channel, ua string, headers
 		if len(variants) > maxHLSVariants {
 			variants, whole = variants[:maxHLSVariants], false
 		}
+		gone := 0 // variants the stream's server says aren't there
 		for _, v := range variants {
 			if env.refuseHere {
 				bu, err := url.Parse(ch.Locator)
@@ -566,11 +717,18 @@ func openHTTPStream(ctx context.Context, env Env, ch Channel, ua string, headers
 					}
 				}
 			}
-			why, read := checkVariant(ctx, env, ch.Locator, v, ua, headers)
+			why, read, status := checkVariant(ctx, env, ch.Locator, v, ua, headers)
 			if why != "" {
 				return nil, &EncryptedError{ch.Name, why}
 			}
+			if status == http.StatusNotFound || status == http.StatusGone {
+				gone++
+			}
 			whole = whole && read
+		}
+		// Every picture it offers is missing: say so now, rather than leave a player waiting.
+		if len(variants) > 0 && gone == len(variants) {
+			return nil, fmt.Errorf("the channel's playlist names video that isn't there (404). The channel may be off the air, or its address out of date")
 		}
 		return &Stream{Input: httpInput(ch.Locator, ua, headers), Verified: whole, Recheck: hlsRecheck(env, ch.Locator, ua, headers)}, nil
 	}
@@ -615,7 +773,7 @@ func readPlaylist(ctx context.Context, env Env, addr, ua string, headers http.He
 	case err != nil:
 		return b, err
 	case res.StatusCode != http.StatusOK:
-		return b, fmt.Errorf("the playlist answered %s", res.Status)
+		return b, statusError(res.StatusCode)
 	case len(b) >= maxPlaylistRead:
 		return b, errors.New("the playlist is too long to read")
 	}
@@ -639,16 +797,27 @@ func variantURL(base, v string) (string, bool) {
 
 // checkVariant says why one variant can't be played, or "", and whether it was read:
 // one that wasn't has said nothing either way.
-func checkVariant(ctx context.Context, env Env, base, v, ua string, headers http.Header) (why string, read bool) {
+func checkVariant(ctx context.Context, env Env, base, v, ua string, headers http.Header) (why string, read bool, status int) {
 	addr, ok := variantURL(base, v)
 	if !ok {
-		return "", false
+		return "", false, 0
 	}
 	b, err := readPlaylist(ctx, env, addr, ua, headers)
 	if why := hlsProtection(b); why != "" {
-		return why, true
+		return why, true, 0
 	}
-	return "", err == nil
+	var se statusError
+	if errors.As(err, &se) {
+		status = int(se)
+	}
+	return "", err == nil, status
+}
+
+// statusError is a playlist's answer that wasn't 200.
+type statusError int
+
+func (e statusError) Error() string {
+	return fmt.Sprintf("the playlist answered %d %s", int(e), http.StatusText(int(e)))
 }
 
 // How often a live playlist is read again: as often as it changes, which its target
@@ -823,4 +992,17 @@ func basicAuth(user, pass string) http.Header {
 		return nil
 	}
 	return http.Header{"Authorization": {"Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+pass))}}
+}
+
+// streamStatusError says what a stream's refusal means, and what might help.
+func streamStatusError(status string, code int) error {
+	switch {
+	case code == 401 || code == 403:
+		return fmt.Errorf("the stream refused this server (%s). The link may have expired, so refreshing the playlist can help, or the provider may want a particular user agent or referrer", status)
+	case code == 404 || code == 410:
+		return fmt.Errorf("the stream isn't there any more (%s). The playlist may be out of date: refresh it", status)
+	case code >= 500:
+		return fmt.Errorf("the provider's server had a problem (%s). Try again in a moment", status)
+	}
+	return fmt.Errorf("the stream answered %s", status)
 }

@@ -26,6 +26,11 @@ export default function SetupStep({ info, next, back }: StepProps) {
     api.get<Tuner[]>(T + '/tuners').then(setTuners).catch(() => {})
   }
   useEffect(load, [])
+  const [demo, setDemo] = useState(false)
+  const addDemo = async () => {
+    setDemo(true)
+    try { await api.post(T + '/tuners', { driver: 'demo', name: 'Demo tuner', options: {}, enabled: true }); load() } catch { /* the button stays, to try again */ } finally { setDemo(false) }
+  }
   // Moving on tells the server the step was gone through, or put off when nothing was added, so
   // Home doesn't ask for it again (POST /setup/tv, as the SDUI page's own Finish does).
   const onward = () => {
@@ -58,6 +63,9 @@ export default function SetupStep({ info, next, back }: StepProps) {
         </ul>
       )}
       <Button icon={<IconPlus />} onClick={() => setOpen(true)}>{tuners.length ? 'Add another' : 'Add live TV'}</Button>
+      {!tuners.some((t) => t.driver === 'demo') && drivers.some((d) => d.id === 'demo' && d.available) && (
+        <p className="tvs-note">No tuner or playlist yet? <Button size="sm" disabled={demo} onClick={() => void addDemo()}>{demo ? 'Adding…' : 'Try a demo tuner'}</Button> Pretend channels and a guide, made on this server, so you can try the guide, recording and WittyTV now. Remove it any time in Settings.</p>
+      )}
       {open && <TunerSetup drivers={drivers} inSetup onClose={() => { setOpen(false); load() }} onAdded={() => api.get<Tuner[]>(T + '/tuners').then(setTuners).catch(() => {})} />}
       <LaterNote info={info} />
       <StepActions back={back}>

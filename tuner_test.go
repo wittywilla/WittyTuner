@@ -820,7 +820,7 @@ func TestSplitCommand(t *testing.T) {
 }
 
 func TestDriversDescribeThemselves(t *testing.T) {
-	want := map[string]bool{"iptv": false, "stream": false, "network": false, "satip": false, "dvb": false, "v4l2": false, "dshow": false, "avfoundation": false, "bda": false, "backend": false, "command": false, "xtream": false}
+	want := map[string]bool{"iptv": false, "stream": false, "network": false, "satip": false, "dvb": false, "v4l2": false, "dshow": false, "avfoundation": false, "bda": false, "backend": false, "command": false, "xtream": false, "demo": false}
 	for _, d := range Drivers(Env{}) {
 		if _, ok := want[d.ID]; !ok {
 			t.Errorf("unexpected driver %s", d.ID)
@@ -885,5 +885,106 @@ func TestXMLTVTogether(t *testing.T) {
 		if !ps[1].Stop.IsZero() || !ps[1].Start.Equal(time.Date(2026, 10, 30, 21, 0, 0, 0, time.UTC)) || *ps[1].Season != 2 {
 			t.Fatalf("%+v", ps[1])
 		}
+	}
+}
+
+func TestParseM3UHeadersAndAlternatives(t *testing.T) {
+	src := `#EXTM3U x-tvg-url="http://g.test/guide.xml.gz" tvg-shift="1"
+#EXTINF:-1 tvg-id="one.test" tvg-name="One" tvg-language="English" tvg-country="UK" group-title="News",One HD
+#EXTVLCOPT:http-user-agent=Player/2.0
+#EXTVLCOPT:http-referrer=https://site.test/
+http://a.test/one.m3u8
+#EXTINF:-1 tvg-id="one.test" tvg-shift="-2.5",One HD
+http://b.test/one.m3u8
+#EXTINF:-1 tvg-id="two.test",Two
+http://a.test/two.ts|User-Agent=Box%2F1&Referer=https://r.test/
+#EXTINF:-1 tvg-id="three.test",Three
+#EXTHTTP:{"User-Agent":"Json/1"}
+http://a.test/three.ts
+`
+	m, err := ParseM3U(strings.NewReader(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.GuideURL != "http://g.test/guide.xml.gz" || len(m.Entries) != 4 {
+		t.Fatalf("%+v", m)
+	}
+	one := m.Entries[0]
+	if one.UserAgent != "Player/2.0" || one.Referrer != "https://site.test/" || one.Language != "English" || one.Country != "UK" || one.GuideShift != 60 {
+		t.Errorf("one: %+v", one.Channel)
+	}
+	if m.Entries[1].UserAgent != "" || m.Entries[1].GuideShift != -150 {
+		t.Errorf("a channel's headers ran on to the next: %+v", m.Entries[1].Channel)
+	}
+	two := m.Entries[2]
+	if two.URL != "http://a.test/two.ts" || two.UserAgent != "Box/1" || two.Referrer != "https://r.test/" {
+		t.Errorf("two: %q %+v", two.URL, two.Channel)
+	}
+	if m.Entries[3].UserAgent != "Json/1" {
+		t.Errorf("three: %+v", m.Entries[3].Channel)
+	}
+	// The same channel at a second address is one channel with a fallback.
+	file := filepath.Join(t.TempDir(), "p.m3u")
+	if err := os.WriteFile(file, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New("iptv", Config{Options: map[string]string{"playlist": file}}, Env{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.Channels(context.Background())
+	if err != nil || len(list) != 3 || len(list[0].Alternates) != 1 || list[0].Alternates[0] != "http://b.test/one.m3u8" {
+		t.Fatalf("%v %+v", err, list)
+	}
+	// A line break in a header value can't add a header of its own.
+	if v := clipHeader("a\r\nX-Evil: 1"); v != "a" {
+		t.Errorf("header %q", v)
+	}
+}
+
+func TestOpenFallsBackToAlternatives(t *testing.T) {
+	var seenUA, seenRef string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/dead" {
+			http.Error(w, "gone", http.StatusNotFound)
+			return
+		}
+		seenUA, seenRef = r.UserAgent(), r.Referer()
+		w.Write(bytes.Repeat(append([]byte{0x47}, make([]byte, 187)...), 10))
+	}))
+	defer srv.Close()
+	file := filepath.Join(t.TempDir(), "p.m3u")
+	os.WriteFile(file, []byte("#EXTM3U\n"), 0o600)
+	s, err := New("iptv", Config{Options: map[string]string{"playlist": file}}, Env{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Open(context.Background(), Channel{Name: "X", Locator: srv.URL + "/dead", Alternates: []string{srv.URL + "/live"}, UserAgent: "UA/9", Referrer: "https://ref.test/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	if seenUA != "UA/9" || seenRef != "https://ref.test/" {
+		t.Errorf("headers %q %q", seenUA, seenRef)
+	}
+	// All down: the first address's error, in words that say what to try.
+	_, err = s.Open(context.Background(), Channel{Name: "X", Locator: srv.URL + "/dead", Alternates: []string{srv.URL + "/dead"}})
+	if err == nil || !strings.Contains(err.Error(), "out of date") {
+		t.Errorf("%v", err)
+	}
+}
+
+func TestHLSWithEveryVariantGone(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/master.m3u8" {
+			w.Write([]byte("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nvideo.m3u8\n"))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	_, err := openHTTPStream(context.Background(), Env{}, Channel{Name: "X", Locator: srv.URL + "/master.m3u8"}, "", nil)
+	if err == nil || !strings.Contains(err.Error(), "isn't there") {
+		t.Fatalf("%v", err)
 	}
 }

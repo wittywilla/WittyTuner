@@ -64,6 +64,17 @@ type Channel struct {
 	// Open for what the channel showed then instead of what it shows now.
 	ArchiveStart int64 `json:"archiveStart,omitempty"`
 	ArchiveEnd   int64 `json:"archiveEnd,omitempty"`
+	// What a playlist says about reaching a channel: the user agent and referrer its address
+	// wants (#EXTVLCOPT, the "address|User-Agent=…" form), and other addresses for the same
+	// channel, tried in turn when one won't open. Like Locator, they can hold a login.
+	UserAgent  string   `json:"userAgent,omitempty"`
+	Referrer   string   `json:"referrer,omitempty"`
+	Alternates []string `json:"alternates,omitempty"`
+	// And about the channel: its language and country (tvg-language, tvg-country), as the
+	// playlist writes them, and how many minutes its guide is moved by (tvg-shift, in hours).
+	Language   string `json:"language,omitempty"`
+	Country    string `json:"country,omitempty"`
+	GuideShift int    `json:"guideShift,omitempty"`
 }
 
 // Stream is an open channel: Reader for raw MPEG-TS, else Input for FFmpeg.

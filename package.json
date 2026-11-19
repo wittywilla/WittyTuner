@@ -1,6 +1,6 @@
 {
   "name": "@wittywilla/wittytuner",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "The browser half of WittyTuner: Settings, Live TV & tuners, the first-run step and the encrypted-channels page, in WittyMediaServer's web app.",
   "license": "AGPL-3.0-or-later",
   "author": "WittyWilla (https://github.com/wittywilla)",

@@ -16,6 +16,7 @@ import { Field, STATUS } from './tunerFields'
 import SpecPage from '@wms/app/spec/SpecPage'
 import { guideSourcesSpec, tunersSpec } from './specs/tuners'
 import TunerSetup from './TunerSetup'
+import GuideReview from './GuideReview'
 import { ModuleMissing } from '@wms/app/components/ModuleMissing'
 import './tvsettings.css'
 import LegalNote from '@wms/app/components/LegalNote'
@@ -33,6 +34,7 @@ export default function TunerSettings() {
   const parts = loc.pathname.split('/').filter(Boolean) // settings, tuners, …
   if (parts[2] === 'tuner' && parts[3]) return <TunerChannels id={parts[3]} />
   if (parts[2] === 'duplicates') return <Duplicates />
+  if (parts[2] === 'guide') return <GuideReview />
   if (parts.length > 2) return <Navigate to={HOME} replace />
   return <Overview />
 }
@@ -72,6 +74,19 @@ function Tuners() {
     // A search that doesn't finish found nothing: Add live TV takes it by hand.
     try { setFound(await api.get<Found[]>(T + '/discover')) } catch { setFound([]) } finally { setSearching(false) }
   }
+  // The demo tuner: one press, and live TV works with no hardware and no internet.
+  const [addingDemo, setAddingDemo] = useState(false)
+  const hasDemo = !!list?.some((t) => t.driver === 'demo')
+  const canDemo = !!drivers?.some((d) => d.id === 'demo' && d.available)
+  const addDemo = async () => {
+    setAddingDemo(true)
+    try {
+      await api.post<Tuner>(T + '/tuners', { driver: 'demo', name: 'Demo tuner', options: {}, enabled: true })
+      forgetLineup()
+      toast('Demo tuner added: its channels are in the guide')
+      void load()
+    } catch (e: any) { toast(e.message) } finally { setAddingDemo(false) }
+  }
   const remove = async (t: Tuner) => {
     if (!await ask({ title: `Remove “${t.name}” from this server?`, body: t.channels === 1 ? 'Its channel goes with it.' : `Its ${t.channels} channels go with it.`, confirm: 'Remove tuner', danger: true })) return
     try { await api.del(`${T}/tuners/${t.id}`); forgetLineup(); void load() } catch (e: any) { toast(e.message) }
@@ -89,10 +104,12 @@ function Tuners() {
     <Section title="Tuners and IPTV" desc={desc}
       actions={<>
         {dupes && list && list.length > 0 && <Link className="btn sm" to={HOME + '/duplicates'}>Duplicates</Link>}
+        {canDemo && !hasDemo && <button className="btn sm" disabled={addingDemo} onClick={() => void addDemo()} title="Pretend channels made on this server, with a guide, for trying live TV without a tuner or the internet">{addingDemo ? 'Adding…' : 'Add a demo tuner'}</button>}
         <button className="btn sm" disabled={searching || !drivers} onClick={() => void search()}><IconRefresh /> {searching ? 'Searching…' : 'Search for tuners'}</button>
         <button className="btn sm primary" disabled={!drivers} onClick={() => setSetup({})}><IconPlus /> Add live TV</button>
       </>}>
       {!drivers && !driversErr && <p className="muted" role="status">Getting WittyTuner ready…</p>}
+      {list && list.length === 0 && canDemo && <p className="tvs-note">No tuner or playlist yet? <b>Add a demo tuner</b> to try the guide, recording and WittyTV with pretend channels made on this server. Remove it any time.</p>}
       {driversErr && <p className="tvs-error" role="alert">WittyTuner didn't answer: {driversErr} <button className="btn sm" onClick={() => void loadDrivers()}><IconRefresh /> Try again</button></p>}
       {drivers && (list || found) && <TunersList list={list} found={found} drivers={drivers} onSetup={(f) => setSetup({ start: f })} onRemove={(t) => void remove(t)} />}
       {drivers && drivers.length > 0 && (
@@ -133,6 +150,11 @@ function TunerChannels({ id }: { id: string }) {
   const [driver, setDriver] = useState<Driver | null>(null)
   const [scan, setScan] = useState<ScanState | null>(null)
   const [q, setQ] = useState('')
+  // Narrowing a long playlist: by its groups, countries and languages, and what's shown or missing.
+  const [group, setGroup] = useState('')
+  const [country, setCountry] = useState('')
+  const [lang, setLang] = useState('')
+  const [only, setOnly] = useState<'' | 'shown' | 'hidden' | 'noguide' | 'missing'>('')
   const [opts, setOpts] = useState<Record<string, string> | null>(null)
   const [limit, setLimit] = useState('0')
   const health = true
@@ -173,7 +195,19 @@ function TunerChannels({ id }: { id: string }) {
   const refresh = async () => {
     try { await api.post(`${T}/tuners/${id}/refresh`); toast('Channel list read'); forgetLineup(); load() } catch (e: any) { toast(e.message) }
   }
-  const shown = (list || []).filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()) || c.number.includes(q) || (c.group || '').toLowerCase().includes(q.toLowerCase())).slice(0, 500)
+  const values = (k: 'group' | 'country' | 'language') => [...new Set((list || []).map((c) => c[k] || '').filter(Boolean))].sort((a, b) => a.localeCompare(b))
+  const groups = values('group'), countries = values('country'), langs = values('language')
+  const matching = (list || []).filter((c) => (!q || c.name.toLowerCase().includes(q.toLowerCase()) || c.number.includes(q) || (c.group || '').toLowerCase().includes(q.toLowerCase()))
+    && (!group || c.group === group) && (!country || c.country === country) && (!lang || c.language === lang)
+    && (!only || (only === 'shown' && c.enabled) || (only === 'hidden' && !c.enabled) || (only === 'noguide' && !c.epgSet && !c.epgId) || (only === 'missing' && !!c.missingSince)))
+  const shown = matching.slice(0, 500)
+  // Show or hide every channel the filters pick: a group of a big playlist at once.
+  const setMatching = async (on: boolean) => {
+    const ids = matching.filter((c) => c.enabled !== on).map((c) => c.id)
+    if (!ids.length) return
+    try { await api.post(`${T}/channels/bulk`, { ids, action: on ? 'enable' : 'disable' }); forgetLineup(); load() } catch (e: any) { toast(e.message) }
+  }
+  const filtered = !!(q || group || country || lang || only)
   const pick = (c: TunerChannel, on: boolean) => setPicked((p) => { const n = new Set(p); if (on) n.add(c.id); else n.delete(c.id); return n })
   const allShownPicked = shown.length > 0 && shown.every((c) => picked.has(c.id))
   // What is picked, in the order shown: renumbering and merging go by it.
@@ -193,8 +227,15 @@ function TunerChannels({ id }: { id: string }) {
         {scan && !scan.running && !scan.error && <p className="tvs-note" role="status">The scan found {scan.clear} clear and {scan.encrypted} encrypted {scan.clear + scan.encrypted === 1 ? 'channel' : 'channels'}{scan.unknown ? `, and ${scan.unknown} not checked yet` : ''}.{scan.encrypted > 0 && <> Encrypted channels can't be played here, which isn't a fault in your setup. <Link to="/tv/encrypted">What can I do?</Link></>}</p>}
         <div className="tvs-toolbar">
           <input className="input" type="search" aria-label="Find a channel" placeholder="Find a channel…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <button className="btn sm ghost" onClick={() => void all(true)}>Show all</button>
-          <button className="btn sm ghost" onClick={() => void all(false)}>Hide all</button>
+          {groups.length > 1 && <select className="input" aria-label="Group" value={group} onChange={(e) => setGroup(e.target.value)}><option value="">Every group</option>{groups.map((g) => <option key={g}>{g}</option>)}</select>}
+          {countries.length > 1 && <select className="input" aria-label="Country" value={country} onChange={(e) => setCountry(e.target.value)}><option value="">Every country</option>{countries.map((g) => <option key={g}>{g}</option>)}</select>}
+          {langs.length > 1 && <select className="input" aria-label="Language" value={lang} onChange={(e) => setLang(e.target.value)}><option value="">Every language</option>{langs.map((g) => <option key={g}>{g}</option>)}</select>}
+          <select className="input" aria-label="Which channels" value={only} onChange={(e) => setOnly(e.target.value as typeof only)}>
+            <option value="">Shown and hidden</option><option value="shown">Shown in the guide</option><option value="hidden">Hidden</option><option value="noguide">With no guide</option><option value="missing">Missing from the playlist</option>
+          </select>
+          {filtered
+            ? <><button className="btn sm ghost" onClick={() => void setMatching(true)}>Show these {matching.length}</button><button className="btn sm ghost" onClick={() => void setMatching(false)}>Hide these {matching.length}</button></>
+            : <><button className="btn sm ghost" onClick={() => void all(true)}>Show all</button><button className="btn sm ghost" onClick={() => void all(false)}>Hide all</button></>}
         </div>
         {bulk && picked.size > 0 && <BulkBar picked={pickedInOrder} all={list || []} health={health} merging={dupes} onDone={() => { setPicked(new Set()); forgetLineup(); load() }} onClear={() => setPicked(new Set())} />}
         <div className="tvs-table-wrap">
@@ -211,7 +252,8 @@ function TunerChannels({ id }: { id: string }) {
                   <td><input className="input tvs-num-in" aria-label={`Number of ${c.name}`} defaultValue={c.number} onBlur={(e) => { if (e.target.value !== c.number) void edit(c, { number: e.target.value }) }} /></td>
                   <td>
                     <input className="input" aria-label={`Name of ${c.name}`} defaultValue={c.name} onBlur={(e) => { if (e.target.value !== c.name) void edit(c, { name: e.target.value }) }} />
-                    {c.group && <small className="tvs-dim">{c.group}</small>}
+                    {(c.group || c.country || c.language) && <small className="tvs-dim">{[c.group, c.country && !(c.group || '').includes(c.country) ? c.country : '', c.language].filter(Boolean).join(' · ')}</small>}
+                    {!!c.missingSince && <small className="tvs-lock">Missing from the playlist since {fmtDateTime(c.missingSince * 1000)}. It's kept for a week in case it comes back, with everything you chose for it.</small>}
                     <Merged c={c} all={list || []} />
                     {!!c.catchupDays && <small className="tvs-dim">Catch-up: {c.catchupDays === 1 ? '1 day' : `${c.catchupDays} days`}</small>}
                   </td>
@@ -224,13 +266,17 @@ function TunerChannels({ id }: { id: string }) {
                   </td>
                   {health && <td><ChannelHealth c={c} /></td>}
                   <td><input type="checkbox" aria-label={`${c.name} can be recorded`} disabled={!!c.encrypted} checked={!c.noRecord && !c.encrypted} title={c.noRecord || 'Untick if the device says this may not be recorded'} onChange={(e) => void edit(c, { noRecord: !e.target.checked })} /></td>
-                  <td><input className="input mono" aria-label={`Guide id of ${c.name}`} defaultValue={c.epgSet || c.epgId || ''} onBlur={(e) => { if (e.target.value !== (c.epgSet || c.epgId || '')) void edit(c, { epg: e.target.value }) }} /></td>
+                  <td>
+                    <input className="input mono" aria-label={`Guide id of ${c.name}`} defaultValue={c.epgSet || c.epgId || ''} onBlur={(e) => { if (e.target.value !== (c.epgSet || c.epgId || '')) void edit(c, { epg: e.target.value }) }} />
+                    {!c.epgSet && !!c.epgId && !!c.epgScore && c.epgScore < 100 && <small className="tvs-dim">Matched {c.epgHow === 'similar' ? 'by a similar name' : 'by ' + (c.epgHow || 'name')}, {c.epgScore}% sure</small>}
+                    {!!c.guideShift && <small className="tvs-dim">Guide moved {c.guideShift > 0 ? '+' : ''}{c.guideShift / 60} h</small>}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        {list && shown.length < list.length && shown.length === 500 && <p className="muted">Showing the first 500. Use the search box to find others.</p>}
+        {matching.length > 500 && <p className="muted">Showing the first 500 of {matching.length}. Use the search box or the filters to find others.</p>}
         <LogoConsentHint compact />
         <LegalNote kind="logos" className="set-legal" />
       </Section>
@@ -261,9 +307,11 @@ function GuideSources() {
   const remove = async (s: EPGSource) => { try { await api.del(`${T}/epg/sources/${s.id}`); void load() } catch (e: any) { toast(e.message) } }
   const refresh = async (s: EPGSource) => { try { await api.post(`${T}/epg/sources/${s.id}/refresh`); toast('Reading the guide…'); setTimeout(() => void load(), 2500) } catch (e: any) { toast(e.message) } }
   return (
-    <Section title="Guide data" desc="Listings for tuner and IPTV channels, in XMLTV format, refreshed by themselves. Broadcasts also carry their own, read while a channel is on. Library channels make their own schedule. Matched by guide id, then by name.">
+    <Section title="Guide data" desc="Listings for tuner and IPTV channels, in XMLTV format (also .gz), refreshed twice a day by themselves. Broadcasts also carry their own, read while a channel is on. Library channels make their own schedule. Channels are matched by guide id, name, number and call sign."
+      actions={<Link className="btn sm" to={HOME + '/guide'}>Match channels to the guide</Link>}>
+      {(list || []).filter((s) => s.warning).map((s) => <p key={s.id} className="tvs-error" role="alert"><b>{s.name}:</b> {s.warning}</p>)}
       <form onSubmit={(e) => { e.preventDefault(); if (url.trim()) void add() }}>
-      <SpecPage embedded bare page={guideSourcesSpec(list && list.map((s) => ({ id: s.id, name: s.name, programmes: s.programmes, read: s.lastFetch ? fmtDateTime(s.lastFetch * 1000) : '', lastError: s.lastError })), url)}
+      <SpecPage embedded bare page={guideSourcesSpec(list && list.map((s) => ({ id: s.id, name: s.name, programmes: s.programmes, read: s.lastFetch ? fmtDateTime(s.lastFetch * 1000) : '', lastError: s.lastError, channels: s.channels, until: s.until ? fmtDateTime(s.until * 1000) : '' })), url)}
         handled={new Set([...(list || []).flatMap((s) => ['again:' + s.id, 'drop:' + s.id]), 'add'])}
         onField={(id, v) => { if (id === 'url') setUrl(String(v)) }}
         onAction={(id) => {

@@ -6,7 +6,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 
 const here = fileURLToPath(new URL('.', import.meta.url))
@@ -19,7 +19,7 @@ async function load() {
   const alias = { name: 'app', setup(b) { b.onResolve({ filter: /^@wms\/app\// }, (a) => ({ path: join(wms, 'web/src', a.path.slice('@wms/app/'.length) + '.ts') })) } }
   await build({ stdin: { contents: "export * from './duplicates.ts'; export * from './tuners.ts'; export * from './tunerSetup.ts'; export { problems, withIds, handledIds, reachable } from '@wms/app/spec/model'", resolveDir: here, loader: 'ts' },
     outfile: out, bundle: true, format: 'esm', platform: 'node', logLevel: 'warning', plugins: [alias] })
-  try { return await import(out) } finally { rmSync(out, { force: true }) }
+  try { return await import(pathToFileURL(out).href) } finally { rmSync(out, { force: true }) }
 }
 
 const g = [{ reason: 'same name', suggested: 2, channels: [{ id: 1, number: '4', name: 'Kids', tuner: 'A', health: 'failing' }, { id: 2, number: '104', name: 'Kids', tuner: 'B', health: 'ok' }] }]
