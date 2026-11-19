@@ -15,6 +15,7 @@ What changed in WittyTuner, newest first. What changed before it had a repositor
 - **Fixed:** errors say what to try: a 403 that the link may have expired or the provider wants a user agent or referrer, a 404 that the playlist is out of date, an HLS channel whose variants are all missing says so at once instead of leaving the player waiting, and a guide source that can't be reached says it's the guide's address. (#18)
 - **Discovery** finds network tuners that answer on another port than 80, by the address their discovery answer names (on the same machine only).
 - The web part's tests run on Windows (they imported a `D:` path instead of a file URL).
+- **Fixed:** readability in every theme: focus rings use the theme's focus colour (the accent fell under 3:1 on panels in Witty and Midnight), a tuner kind that can't be used here and a backup channel's row are drawn in the quieter text colour instead of faded (3.1:1 over the Aero scenes).
 
 - **Fixed:** the web part asked for `/tuners/drivers`, `/tuners/discover` and `/tuners/duplicates`, which the service serves as `/drivers`, `/discover` and `/duplicates`. The first-run step said "Live TV couldn't be loaded", and Settings couldn't list the kinds of tuner, search for tuners or check for duplicate channels. (#12)
 - **Fixed:** nothing checked that the paths the web part asks for are the ones `integration.json` declares, which is how #12 got through. A Go test now reads every call in `web/app` and fails on a path or method the server wouldn't pass on. (#14)
