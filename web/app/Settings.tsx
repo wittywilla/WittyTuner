@@ -102,12 +102,12 @@ function Tuners() {
   }
   return (
     <Section title="Tuners and IPTV" desc={desc}
-      actions={<>
+      actions={<div className="tvs-actions">
         {dupes && list && list.length > 0 && <Link className="btn sm" to={HOME + '/duplicates'}>Duplicates</Link>}
         {canDemo && !hasDemo && <button className="btn sm" disabled={addingDemo} onClick={() => void addDemo()} title="Pretend channels made on this server, with a guide, for trying live TV without a tuner or the internet">{addingDemo ? 'Adding…' : 'Add a demo tuner'}</button>}
         <button className="btn sm" disabled={searching || !drivers} onClick={() => void search()}><IconRefresh /> {searching ? 'Searching…' : 'Search for tuners'}</button>
         <button className="btn sm primary" disabled={!drivers} onClick={() => setSetup({})}><IconPlus /> Add live TV</button>
-      </>}>
+      </div>}>
       {!drivers && !driversErr && <p className="muted" role="status">Getting WittyTuner ready…</p>}
       {list && list.length === 0 && canDemo && <p className="tvs-note">No tuner or playlist yet? <b>Add a demo tuner</b> to try the guide, recording and WittyTV with pretend channels made on this server. Remove it any time.</p>}
       {driversErr && <p className="tvs-error" role="alert">WittyTuner didn't answer: {driversErr} <button className="btn sm" onClick={() => void loadDrivers()}><IconRefresh /> Try again</button></p>}
@@ -217,10 +217,10 @@ function TunerChannels({ id }: { id: string }) {
       <PageHead title={t?.name || 'Tuner'} desc={t?.detail || driver?.name} actions={<Link className="btn" to={HOME}>Back</Link>} />
       {t?.lastError && <p className="tvs-error" role="alert">{t.lastError}</p>}
       <Section title="Channels" desc={list ? `${list.length} channels, ${list.filter((c) => c.enabled).length} shown in the guide. What you change here stays when the list is read again.` : ''}
-        actions={<>
+        actions={<div className="tvs-actions">
           <button className="btn sm" onClick={() => void refresh()}><IconRefresh /> Read the list</button>
           {driver?.scans && <button className="btn sm primary" disabled={scan?.running} onClick={() => void startScan(opts?.source || '')}>{scan?.running ? `Scanning… ${scan.percent}%` : 'Scan for channels'}</button>}
-        </>}>
+        </div>}>
         {health && <CheckAll tunerId={id} onDone={load} />}
         {scan?.running && <div className="tvs-progress" role="progressbar" aria-valuenow={scan.percent} aria-valuemin={0} aria-valuemax={100} aria-label="Scan progress"><i style={{ width: scan.percent + '%' }} /><span>{scan.found} found{scan.message ? ` · ${scan.message}` : ''}</span></div>}
         {scan?.error && <p className="tvs-error" role="alert">{scan.error}</p>}

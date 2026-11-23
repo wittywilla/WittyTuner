@@ -65,10 +65,10 @@ export default function GuideReview() {
       {data && (
         <Section title={all ? 'Every channel' : 'To check'}
           desc={`${data.total} channels: ${data.matched} matched, ${data.unsure} unsure, ${data.none} with no guide. The guide has ${data.guideChannels} channels.`}
-          actions={<>
+          actions={<div className="tvs-actions">
             <label className="tvs-check"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Show every channel</label>
             <button className="btn sm primary" disabled={busy || data.guideChannels === 0} onClick={() => void auto()}>{busy ? 'Matching…' : 'Match what is sure'}</button>
-          </>}>
+          </div>}>
           {data.channels.length === 0 && <p className="muted" role="status">Every channel has its guide.</p>}
           <ul className="tvs-review" aria-label="Channels to match">
             {data.channels.map((c) => <ReviewRow key={c.id} c={c} onChoose={(id) => void choose(c, id)} />)}
