@@ -3,6 +3,10 @@
 What changed in WittyTuner, newest first. What changed before it had a repository of its own is in the
 [WittyMediaServer changelog](https://github.com/wittywilla/WittyMediaServer/blob/master/CHANGELOG.md).
 
+## Unreleased
+
+- **WittyTuner 0.5.1:** Fuzz tests for playlists, their header options, channel addresses, tuner discovery and guides.
+
 ## 0.5.0
 
 **New**
