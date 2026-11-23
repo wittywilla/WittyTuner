@@ -4,17 +4,32 @@
 package xmltv
 
 import (
-	"strings"
+	"bytes"
+	"compress/gzip"
 	"testing"
 )
 
-// A guide comes from whoever publishes it: no file may crash the reader or its time parser.
+// A guide comes from the internet, often gzipped. Reading one, whatever it holds, must not panic.
 func FuzzParse(f *testing.F) {
-	f.Add(`<tv><channel id="a"><display-name>One</display-name></channel><programme start="20261123010000 +0000" stop="20261123020000 +0000" channel="a"><title>News</title></programme></tv>`)
-	f.Add(`<tv><programme start="20261123020000 -0500" stop="20261123010000" channel="b"><title/></programme>`)
-	f.Add(`<!DOCTYPE tv [<!ENTITY a "aaaa">]><tv>&a;</tv>`)
-	f.Fuzz(func(t *testing.T, s string) {
-		_ = Parse(strings.NewReader(s), func(Channel) bool { return true }, func(Programme) bool { return true })
-		ParseTime(s)
+	plain := []byte(`<?xml version="1.0"?><tv><channel id="a"><display-name>A</display-name><icon src="https://example.com/a.png"/></channel>` +
+		`<programme start="20261123180000 +0100" stop="20261123190000 +0100" channel="a"><title>News</title><episode-num system="xmltv_ns">1.2.</episode-num></programme></tv>`)
+	f.Add(plain)
+	var gz bytes.Buffer
+	w := gzip.NewWriter(&gz)
+	_, _ = w.Write(plain)
+	_ = w.Close()
+	f.Add(gz.Bytes())
+	f.Add([]byte(`<!DOCTYPE tv [<!ENTITY a "aaaaaaaa">]><tv><programme start="x" channel="&a;"/></tv>`))
+	f.Add([]byte{0x1f, 0x8b, 0, 0})
+	f.Fuzz(func(t *testing.T, b []byte) {
+		n := 0
+		_ = Parse(bytes.NewReader(b), func(Channel) bool { n++; return n < 10000 }, func(Programme) bool { n++; return n < 10000 })
 	})
+}
+
+func FuzzParseTime(f *testing.F) {
+	for _, s := range []string{"20261123180000 +0100", "20261123180000", "2026112318", "", "99999999999999 -9999"} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) { _, _ = ParseTime(s) })
 }
