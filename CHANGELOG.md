@@ -5,6 +5,28 @@ What changed in WittyTuner, newest first. What changed before it had a repositor
 
 ## 0.5.0
 
+**New**
+
+- **A demo tuner.** Add one in Settings, or choose Try a demo tuner while setting up, to try Live TV, the guide, recordings and WittyTV with no hardware and no internet. It has test-pattern channels with a clock, clips from a folder you pick playing in a loop, a protected channel to show how encrypted channels look, and a guide of its own. It's labelled as a demo everywhere.
+- **Matching channels to the guide.** Channels are matched to guide listings by id, name, call sign and number, and the sure matches are made for you. Match channels to the guide lists the rest with their likeliest listings, one press to take one, and a search of the whole guide. A match you choose is kept when the playlist is added again. On a TV, this page asks you to use a computer.
+- **Guide sources say how they're doing:** how many channels they cover, how far ahead the listings go, and a warning when one hasn't been read for two days or its listings are about to run out.
+- **Better IPTV playlists.** More of what providers put in their playlists is understood, such as language, country, time shift, and the user agent or referrer a channel needs. The Channels page can filter by group, country, language, hidden, no guide and missing, and show or hide every channel a filter picks.
+- **Finding network tuners** also finds one running on this computer that answers on a port other than 80.
+
+**Fixed**
+
+- **HDHomeRun network tuners play again.** On current firmware every channel was refused with "the device's channel list points at another address". Finding a device also asks for it by name, and when nothing is found, setup explains why that may be (the device is off or on another network, or a firewall is blocking it) and that you can type its address instead, such as 192.168.1.50 or hdhomerun.local. An older model that can't stream over the network says so.
+- **Reading a playlist again keeps your channels** when a provider changes their addresses, as many do with login tokens, along with their favourites, recordings, numbers and guide matches. A channel that disappears is kept hidden for a week in case it comes back.
+- **A channel listed twice** keeps both addresses, and the second is tried when the first won't open.
+- **The guide no longer goes empty** when two reads of the same guide happen at once.
+- **Errors say what to try:** a link that may have expired, a playlist that's out of date, a channel with nothing to play, or a guide address that can't be reached.
+- **Setting up live TV works again,** both in the first-run step and in Settings, Live TV & tuners. If WittyTuner can't be reached, setup lets you set live TV up later instead of stopping.
+- **Easier to read in every theme:** focus rings and greyed-out rows have enough contrast.
+
+## Developer notes for 0.5.0
+
+The same release in technical detail (not shown in What's new).
+
 - **New: the demo tuner** (#19). **Add a demo tuner** in Settings, or **Try a demo tuner** in the first-run step (and on every app's setup page, among what was found), adds a pretend network tuner that runs inside WittyTuner on this computer: test-pattern channels with their name and a clock, made by the server's FFmpeg, clips from a folder you choose played in a loop, a channel marked as protected to show how encrypted channels look, and a guide of its own. Live TV, the guide, recordings and WittyTV work with no hardware and no internet. It answers the network tuner discovery and lineup protocol on `127.0.0.1`, so the real network tuner code runs end to end. Its settings choose how many tuners it has, slow tuning and a signal that drops now and then, for testing error handling. Labelled as a demo everywhere.
 - **New: matching channels to the guide** (#20). Channels are matched by guide id (whatever its case or suffix), by name (without a playlist's country tags and HD-style words, in any alphabet), by call sign and by number, each with a confidence score; sure matches are made after every guide and playlist read. **Match channels to the guide** lists channels with no guide or an unsure match, with their likeliest guide entries (one press takes one) and a search of the whole guide. A match chosen by hand is remembered by the channel's name, so a playlist added again keeps it. On a TV that page says to use a computer.
 - **New:** a guide source says how many channels it covers, how far ahead its listings go, and warns when it hasn't been read for two days or its listings run out within 12 hours.
@@ -21,10 +43,6 @@ What changed in WittyTuner, newest first. What changed before it had a repositor
 - **Fixed:** the web part asked for `/tuners/drivers`, `/tuners/discover` and `/tuners/duplicates`, which the service serves as `/drivers`, `/discover` and `/duplicates`. The first-run step said "Live TV couldn't be loaded", and Settings couldn't list the kinds of tuner, search for tuners or check for duplicate channels. (#12)
 - **Fixed:** nothing checked that the paths the web part asks for are the ones `integration.json` declares, which is how #12 got through. A Go test now reads every call in `web/app` and fails on a path or method the server wouldn't pass on. (#14)
 - **Fixed:** when the first-run step can't reach WittyTuner, it says live TV can be set up later in Settings, Live TV & tuners, and setup carries on with **Set it up later** (Try again is still there), instead of "Live TV couldn't be loaded". Moving on from the step tells the server it was gone through, or put off when nothing was added (`POST /setup/tv`), so "Finish setting up WittyTuner" doesn't stay on Home. (#14)
-
-- The README's guide and recordings pictures are retaken: two channels with schedules of their own, and longer programmes in the guide.
-
-- The README's pictures are retaken from WittyMediaServer 0.8.0-alpha.
 
 ## 0.4.0
 
