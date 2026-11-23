@@ -85,6 +85,11 @@ test('tuner setup: details with found devices, a check and an error', { skip: !w
   ok(bad)
   assert.ok(bad.sections.some((s) => s.kind === 'note' && /Still needed: Address/.test(s.text)))
   assert.ok(bad.sections.some((s) => s.kind === 'note' && /No answer Check it/.test(s.text)))
+  // A network tuner's search that finds nothing says why it may not have, and what to do instead.
+  const none = detailsSpec({ choices: [d], driver: d, fields: [], name: '', opts: {}, canSearch: true, searching: false, found: [], missing: [], err: '', check: null, nothingFound: 'Firewall: choose Allow, or type its address.' })
+  ok(none)
+  assert.ok(none.sections.some((s) => s.kind === 'note' && s.text === 'Firewall: choose Allow, or type its address.'))
+  assert.ok(bad.sections.some((s) => s.kind === 'note' && /Type its details below/.test(s.text)), 'other kinds keep the general words')
 })
 
 test('tuner setup: channels, try and guide steps', { skip: !wms && 'no WittyMediaServer checkout' }, async () => {

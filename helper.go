@@ -4,9 +4,11 @@
 package wittytuner
 
 import (
+	"context"
 	"errors"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // CheckLocator says whether this source would use an address for a channel.
@@ -18,7 +20,10 @@ func (c checked) CheckLocator(locator string) error {
 }
 
 func (t *netTuner) checkLocator(locator string) error {
-	_, err := t.streamURL(Channel{Locator: locator})
+	// It may ask the device what it calls itself, which takes a moment at most.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := t.streamURL(ctx, Channel{Locator: locator})
 	return err
 }
 

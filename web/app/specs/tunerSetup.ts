@@ -33,6 +33,8 @@ export function toField(f: DriverFieldLine, value: string): SpecField {
 export interface DetailsState {
   choices: DriverLine[]; driver: DriverLine | null; fields: DriverFieldLine[]; name: string; opts: Record<string, string>
   canSearch: boolean; searching: boolean; found: FoundLine[] | null; missing: string[]
+  // What to say when a search finds nothing, for this kind of device ('' = the general words).
+  nothingFound?: string
   check: { ok: true; text: string; sample?: string } | { ok: false; problem: ProblemLine } | null; err: string
 }
 
@@ -50,7 +52,7 @@ export function detailsSpec(s: DetailsState): SpecPageData {
       sections.push(secR('Search', [{ id: 'search', title: s.searching ? 'Searching…' : 'Search for it', sub: 'Or type its details below: anything the search doesn’t find can be added by hand.', disabled: s.searching }]))
     }
     if (s.found && s.found.length) sections.push(secR('Found', s.found.map((f, i) => ({ id: 'found:' + i, title: f.name, sub: f.detail, actions: [{ id: 'use:' + i, title: 'Use this one', label: 'Use ' + f.name }] }))))
-    if (s.found && !s.found.length) sections.push(secN('', 'Nothing found on your network or this computer, or the search didn’t finish. Type its details below.'))
+    if (s.found && !s.found.length) sections.push(secN('', s.nothingFound || 'Nothing found on your network or this computer, or the search didn’t finish. Type its details below.'))
     sections.push(secF('Details', [{ id: 'name', kind: 'text', label: 'Name', value: s.name, placeholder: s.driver.name, autoFocus: true }, ...s.fields.map((f) => toField(f, s.opts[f.key] || ''))]))
     if (s.missing.length) sections.push(secN('', `Still needed: ${s.missing.join(', ')}.`))
     sections.push(secN('', 'No channel lists or stream addresses come with the server: bring your own. Check asks for its channels without saving anything, to see that the details are right.'))

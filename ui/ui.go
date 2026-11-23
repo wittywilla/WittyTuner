@@ -142,7 +142,7 @@ func UI() *sdui.Module {
 	tuners := page(PageTuners, "Live TV & tuners", admins,
 		withWhen(sdui.Sec("intro", "Text", sdui.Props("text", "Tuners, IPTV playlists and streams put their channels in the guide beside the ones made from your library. Encrypted channels are shown as encrypted and never decrypted."), nil), forAdmins),
 		list("tuners", "Tuners and IPTV", sdui.Src(SourceTuners), "empty", "message", "emptyText", "None yet. Add one found on this network below, or in a browser."),
-		list("found", "Found on this network", sdui.Src(SourceFound), "empty", "message", "emptyText", "Nothing answered. A device that doesn't answer a search is added by its address, in a browser."),
+		list("found", "Found on this network", sdui.Src(SourceFound), "empty", "message", "emptyText", "Nothing answered. Check it's on this server's network, and that the firewall lets wittytuner-module use private networks. Or add it by its address, in a browser."),
 		list("guides", "Guide data", sdui.Src(SourceGuides), "empty", "message", "emptyText", "No guide sources. A tuner or provider that has its own guide adds it by itself."),
 		browser)
 	tuners.Description = "For administrators, on every app: the tuners, IPTV playlists and streams, the tuners on this network to add with a press, and the guide sources."
@@ -157,7 +157,7 @@ func UI() *sdui.Module {
 	setup := page(PageSetup, "Set up live TV", admins,
 		withWhen(sdui.Sec("intro", "Text", sdui.Props("text", "Add a TV tuner, a provider's playlist or a single stream, and its channels sit in the guide beside the ones made from your library. No channel lists or stream addresses come with the server: bring your own."), nil), forAdmins),
 		list("tuners", "Added", sdui.Src(SourceTuners), "empty", "message", "emptyText", "Nothing added yet."),
-		list("found", "Found on this network", sdui.Src(SourceFound), "empty", "message", "emptyText", "Nothing answered. A device that doesn't answer a search is added by its address, in a browser."),
+		list("found", "Found on this network", sdui.Src(SourceFound), "empty", "message", "emptyText", "Nothing answered. Check it's on this server's network, and that the firewall lets wittytuner-module use private networks. Or add it by its address, in a browser."),
 		browser,
 		list("finish", "", sdui.Src(SourceSetup)))
 	setup.Description = "WittyTuner's first-run step on every app, for administrators: the server's \"Finish setting up WittyTuner\" notice on Home opens it."

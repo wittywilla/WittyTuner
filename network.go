@@ -13,11 +13,14 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -33,7 +36,7 @@ func init() {
 		Description: "Antenna or cable boxes on your network that stream over HTTP. Usually found by themselves.",
 		Scans:       true,
 		Fields: []Field{
-			{Key: "address", Label: "Address", Kind: "text", Required: true, Help: "The device's address, such as 192.168.1.50."},
+			{Key: "address", Label: "Address", Kind: "text", Required: true, Help: "The device's address, such as 192.168.1.50 or hdhomerun.local. The HDHomeRun app or your router's list of devices shows it."},
 			{Key: "source", Label: "Signal", Kind: "select", Options: []string{"Antenna", "Cable"}, Default: "Antenna", Help: "Which signal a channel scan looks at."},
 		},
 		build: func(c Config, e Env) (Source, error) {
@@ -66,6 +69,7 @@ type netTuner struct {
 	cfg  Config
 	env  Env
 	base string
+	mu   sync.Mutex // holds dev, which streams opened together may both fill in
 	dev  discoverJSON
 }
 
@@ -128,6 +132,8 @@ func getJSON(ctx context.Context, c *http.Client, addr string, out any) error {
 }
 
 func (t *netTuner) Info() Info {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	i := Info{Driver: "network", Name: t.cfg.Name, MaxStreams: t.dev.TunerCount, Detail: t.base}
 	if t.dev.ModelNumber != "" {
 		i.Detail = strings.TrimSpace(t.dev.FriendlyName + " " + t.dev.ModelNumber + " at " + t.base)
@@ -136,18 +142,29 @@ func (t *netTuner) Info() Info {
 }
 
 func (t *netTuner) discover(ctx context.Context) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.dev.DeviceID != "" || t.dev.ModelNumber != "" {
 		return nil
 	}
-	if err := getJSON(ctx, t.env.http(), t.base+"/discover.json", &t.dev); err != nil {
+	var d discoverJSON
+	if err := getJSON(ctx, t.env.http(), t.base+"/discover.json", &d); err != nil {
 		return fmt.Errorf("no tuner answered at %s: %w", t.base, err)
 	}
+	t.dev = d
+	t.env.logger().InfoContext(ctx, "network tuner", "topic", "tuner", "model", d.ModelNumber, "firmware", d.Firmware, "tuners", d.TunerCount, "legacy", d.Legacy)
 	return nil
 }
 
 func (t *netTuner) Channels(ctx context.Context) ([]Channel, error) {
 	if err := t.discover(ctx); err != nil {
 		return nil, err
+	}
+	t.mu.Lock()
+	legacy, model := t.dev.Legacy != 0, t.dev.ModelNumber
+	t.mu.Unlock()
+	if legacy {
+		return nil, fmt.Errorf("%s is an older model that its maker calls legacy: it has no channel list or streams over HTTP, which is how WittyTuner uses network tuners, so it can't be used here yet", firstNonEmpty(model, "this device"))
 	}
 	var lineup []lineupEntry
 	if err := getJSON(ctx, t.env.http(), t.base+"/lineup.json", &lineup); err != nil {
@@ -200,11 +217,16 @@ func (t *netTuner) Scan(ctx context.Context, o ScanOptions, progress func(Progre
 		if err := getJSON(ctx, t.env.http(), t.base+"/lineup_status.json", &st); err != nil {
 			return nil, err
 		}
-		if progress != nil {
+		if progress != nil && st.ScanInProgress != 0 {
 			progress(Progress{Percent: st.Progress, Found: st.Found})
 		}
 		if st.ScanInProgress == 0 {
-			return t.Channels(ctx)
+			// A device says nothing of progress once it's done: it's done.
+			ch, err := t.Channels(ctx)
+			if err == nil && progress != nil {
+				progress(Progress{Percent: 100, Found: len(ch)})
+			}
+			return ch, err
 		}
 		select {
 		case <-ctx.Done():
@@ -220,7 +242,7 @@ func (t *netTuner) Open(ctx context.Context, ch Channel) (*Stream, error) {
 	if ch.Encrypted != "" {
 		return nil, &EncryptedError{ch.Name, ch.Encrypted}
 	}
-	addr, err := t.streamURL(ch)
+	addr, err := t.streamURL(ctx, ch)
 	if err != nil {
 		return nil, err
 	}
@@ -237,6 +259,12 @@ func (t *netTuner) Open(ctx context.Context, ch Channel) (*Stream, error) {
 		// The device explains itself in a header, as its maker's guide lists.
 		code := res.Header.Get("X-HDHomeRun-Error")
 		num, _, _ := strings.Cut(code, " ")
+		// What the device said goes in the log as it said it: these lines are what a report needs.
+		t.mu.Lock()
+		model, firmware := t.dev.ModelNumber, t.dev.Firmware
+		t.mu.Unlock()
+		t.env.logger().InfoContext(ctx, "the network tuner refused a channel", "topic", "tuner", "channel", ch.Number,
+			"status", res.Status, "deviceError", code, "model", model, "firmware", firmware)
 		switch num {
 		case "811":
 			return nil, &EncryptedError{ch.Name, "the device says it needs copy protection"}
@@ -257,18 +285,50 @@ func (t *netTuner) Open(ctx context.Context, ch Channel) (*Stream, error) {
 	return guarded(res.Body), nil
 }
 
-// streamURL uses the address from the lineup, but only on the device's own
-// host: a lineup is data from the network, not a reason to go elsewhere.
-func (t *netTuner) streamURL(ch Channel) (string, error) {
+// streamURL uses the address from the lineup, but always on the device's own host, the one it
+// was added by: a lineup is data from the network, not a reason to go elsewhere. A device may name
+// itself in its lineup differently from how it was added (current firmware writes
+// http://hdhr-<id>.local:5004/..., older firmware its IP address, and either can be added by the
+// other): that's the same device, so its port and path are kept and the host is the known one.
+// A lineup naming some other machine is refused.
+func (t *netTuner) streamURL(ctx context.Context, ch Channel) (string, error) {
 	base, _ := url.Parse(t.base)
 	u, err := url.Parse(ch.Locator)
 	if err != nil || u.Host == "" {
 		return "http://" + net.JoinHostPort(base.Hostname(), "5004") + "/auto/v" + url.PathEscape(ch.Number), nil
 	}
-	if u.Hostname() != base.Hostname() || (u.Scheme != "http" && u.Scheme != "https") {
+	if u.Scheme != "http" && u.Scheme != "https" || u.User != nil {
 		return "", errors.New("the device's channel list points at another address")
 	}
+	if !strings.EqualFold(u.Hostname(), base.Hostname()) {
+		if t.discover(ctx) != nil || !t.ownName(u.Hostname()) {
+			return "", errors.New("the device's channel list points at another address")
+		}
+		port := u.Port()
+		if port == "" {
+			port = map[string]string{"http": "80", "https": "443"}[u.Scheme]
+		}
+		u.Host = net.JoinHostPort(base.Hostname(), port)
+	}
 	return u.String(), nil
+}
+
+// ownName: a name the device gives itself, in its discover.json (BaseURL, LineupURL) or by the
+// maker's naming (hdhr-<device id>.local, <device id>.local, hdhomerun.local).
+func (t *netTuner) ownName(host string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	if host == "" {
+		return false
+	}
+	for _, a := range []string{t.dev.BaseURL, t.dev.LineupURL} {
+		if u, err := url.Parse(a); err == nil && u.Hostname() != "" && strings.EqualFold(u.Hostname(), host) {
+			return true
+		}
+	}
+	id := strings.ToLower(strings.TrimSpace(t.dev.DeviceID))
+	return host == "hdhomerun.local" || (id != "" && (host == "hdhr-"+id+".local" || host == id+".local"))
 }
 
 func (t *netTuner) Close() error { return nil }
@@ -396,15 +456,41 @@ func discoverDevice(ctx context.Context, env Env, host string) (discoverJSON, er
 	return d, err
 }
 
+// Where discovery asks: the maker's port, on every broadcast address and this machine. Tests point
+// them at a device of their own.
+var (
+	hdhrDiscoverPort    = hdhrPort
+	hdhrDiscoverTargets = func() []net.IP { return append(broadcastAddrs(), net.IPv4(127, 0, 0, 1)) }
+	// hdhrNames are names the maker's devices answer to by multicast DNS (info.hdhomerun.com,
+	// http_api): asked by name, the question goes through the system's own resolver, which a
+	// firewall that stops the UDP search's answers lets through.
+	hdhrNames = []string{"hdhomerun.local"}
+	// discoverListen is where the search's own socket listens. Tests keep it on this machine, so
+	// Windows' firewall never stops to ask about a test program.
+	discoverListen = ":0"
+)
+
 func discoverNetworkTuners(ctx context.Context, env Env) []Found {
+	var mu sync.Mutex
 	hosts := map[string]bool{}
+	add := func(h string) {
+		mu.Lock()
+		hosts[h] = true
+		mu.Unlock()
+	}
+	var wg sync.WaitGroup
 	// The maker's UDP protocol.
-	if conn, err := net.ListenPacket("udp4", ":0"); err == nil {
+	wg.Go(func() {
+		conn, err := net.ListenPacket("udp4", discoverListen)
+		if err != nil {
+			env.logger().InfoContext(ctx, "the network tuner search couldn't start", "topic", "tuner", "err", err)
+			return
+		}
 		defer conn.Close()
 		req := hdhrDiscoverRequest()
 		// This machine too: a tuner emulated here (the demo tuner) doesn't hear a broadcast.
-		for _, dst := range append(broadcastAddrs(), net.IPv4(127, 0, 0, 1)) {
-			_, _ = conn.WriteTo(req, &net.UDPAddr{IP: dst, Port: hdhrPort})
+		for _, dst := range hdhrDiscoverTargets() {
+			_, _ = conn.WriteTo(req, &net.UDPAddr{IP: dst, Port: hdhrDiscoverPort})
 		}
 		_ = conn.SetReadDeadline(time.Now().Add(1500 * time.Millisecond))
 		buf := make([]byte, 2048)
@@ -415,24 +501,53 @@ func discoverNetworkTuners(ctx context.Context, env Env) []Found {
 			}
 			if rep, ok := parseHDHRReply(buf[:n]); ok {
 				if u, ok := from.(*net.UDPAddr); ok && lanHost(u.IP.String()) {
-					hosts[replyHost(rep, u)] = true
+					add(replyHost(rep, u))
 				}
 			}
 		}
-	}
+	})
 	// SSDP, which devices that emulate one answer.
-	for _, loc := range ssdpSearch(ctx, "urn:schemas-upnp-org:device:MediaServer:1", 1500*time.Millisecond) {
-		if u, err := url.Parse(loc); err == nil {
-			hosts[u.Host] = true
+	wg.Go(func() {
+		for _, loc := range ssdpSearch(ctx, "urn:schemas-upnp-org:device:MediaServer:1", 1500*time.Millisecond) {
+			if u, err := url.Parse(loc); err == nil {
+				add(u.Host)
+			}
 		}
+	})
+	// The device's own name.
+	for _, name := range hdhrNames {
+		wg.Go(func() {
+			c, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+			defer cancel()
+			ips, err := net.DefaultResolver.LookupIP(c, "ip4", name)
+			if err != nil {
+				return
+			}
+			for _, ip := range ips {
+				if lanHost(ip.String()) {
+					add(ip.String())
+				}
+			}
+		})
 	}
+	wg.Wait()
 	var out []Found
-	for h := range hosts {
+	seen := map[string]bool{} // one device found two ways is one device
+	for _, h := range slices.Sorted(maps.Keys(hosts)) {
 		c, cancel := context.WithTimeout(ctx, 2*time.Second)
 		d, err := discoverDevice(c, env, h)
 		cancel()
 		if err != nil || (d.DeviceID == "" && d.ModelNumber == "") {
+			if err != nil {
+				env.logger().InfoContext(ctx, "a network tuner answered the search, but not its discover.json", "topic", "tuner", "err", withoutAddress(err))
+			}
 			continue
+		}
+		if d.DeviceID != "" {
+			if seen[d.DeviceID] {
+				continue
+			}
+			seen[d.DeviceID] = true
 		}
 		if d.ModelNumber == DemoModel {
 			if _, port, err := net.SplitHostPort(h); err == nil {
@@ -441,6 +556,7 @@ func discoverNetworkTuners(ctx context.Context, env Env) []Found {
 			}
 			continue
 		}
+		env.logger().InfoContext(ctx, "network tuner found", "topic", "tuner", "model", d.ModelNumber, "firmware", d.Firmware, "tuners", d.TunerCount, "at", h)
 		out = append(out, Found{Driver: "network", Name: firstNonEmpty(d.FriendlyName, "Network tuner"),
 			Detail: fmt.Sprintf("%s, %d tuners, %s", d.ModelNumber, d.TunerCount, h), Options: map[string]string{"address": h}})
 	}
@@ -500,7 +616,7 @@ func broadcastAddrs() []net.IP {
 // ssdpSearch multicasts an M-SEARCH and collects the LOCATION of each answer that names
 // the machine that answered.
 func ssdpSearch(ctx context.Context, st string, wait time.Duration) []string {
-	conn, err := net.ListenPacket("udp4", ":0")
+	conn, err := net.ListenPacket("udp4", discoverListen)
 	if err != nil {
 		return nil
 	}
