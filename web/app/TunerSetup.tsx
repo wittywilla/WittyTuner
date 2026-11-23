@@ -41,6 +41,10 @@ const STEP_NAMES: Record<Step, string> = { kind: 'What you have', details: 'Its 
 const plural = (n: number, one: string) => `${n} ${n === 1 ? one : one + 's'}`
 
 // inSetup: opened from first-time setup, which carries on afterwards, so the last step doesn't lead away from it.
+// A network tuner's search is a question on the home network that the device answers. When nothing
+// does, it's mostly the network or the firewall: say which, and that the address does as well.
+export const NETWORK_NOTHING_FOUND = 'Nothing answered the search. A network tuner, such as an HDHomeRun, answers when it’s switched on and on the same network as this server. If Windows asked whether WittyTuner (wittytuner-module) may use the network, choose Allow for private networks: saying no stops the search hearing any answer. Or type its address below: the HDHomeRun app or your router’s list of devices shows it, such as 192.168.1.50.'
+
 export default function TunerSetup({ drivers, start, onClose, onAdded, inSetup }: { drivers: Driver[]; start?: Found; onClose: () => void; onAdded: () => void; inSetup?: boolean }) {
   const first = start ? drivers.find((d) => d.id === start.driver) : undefined
   const [step, setStep] = useState<Step>(first ? 'details' : 'kind')
@@ -217,7 +221,7 @@ export default function TunerSetup({ drivers, start, onClose, onAdded, inSetup }
           <Spec page={detailsSpec({
             choices: choices.map(lineOf), driver: driver ? lineOf(driver) : null, fields: driver?.fields || [], name, opts,
             canSearch: ['network', 'satip', 'card'].includes(kind?.id || ''), searching, found: found ? found.map((f) => ({ name: f.name, detail: f.detail || drivers.find((d) => d.id === f.driver)?.name || '' })) : null,
-            missing, err,
+            missing, err, nothingFound: kind?.id === 'network' ? NETWORK_NOTHING_FOUND : '',
             check: check ? (check.ok ? { ok: true, text: `${check.result.detail ? `${check.result.detail}. ` : ''}${check.result.channels > 0 ? `${plural(check.result.channels, 'channel')} listed` : driver?.scans ? 'No channels listed yet: this kind finds them with a scan after it is added' : 'No channels listed yet'}.`, sample: check.result.sample?.join(', ') } : { ok: false, problem: check.problem }) : null,
           })} onAction={onAction} onField={onField} />
           <button type="submit" hidden />

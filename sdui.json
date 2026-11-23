@@ -58,7 +58,7 @@
           "component": "List",
           "props": {
             "empty": "message",
-            "emptyText": "Nothing answered. A device that doesn't answer a search is added by its address, in a browser.",
+            "emptyText": "Nothing answered. Check it's on this server's network, and that the firewall lets wittytuner-module use private networks. Or add it by its address, in a browser.",
             "focusable": true,
             "title": "Found on this network"
           },
@@ -203,7 +203,7 @@
           "component": "List",
           "props": {
             "empty": "message",
-            "emptyText": "Nothing answered. A device that doesn't answer a search is added by its address, in a browser.",
+            "emptyText": "Nothing answered. Check it's on this server's network, and that the firewall lets wittytuner-module use private networks. Or add it by its address, in a browser.",
             "focusable": true,
             "title": "Found on this network"
           },
