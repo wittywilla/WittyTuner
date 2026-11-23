@@ -125,7 +125,6 @@ type Manager struct {
 	inUse   map[int64]int
 	health  map[int64]*HealthState // channel checks, by tuner
 	slots   map[string]*slot       // streams the server holds, by id
-	nextID  int64
 	epgOnce sync.Once
 	// Stop ends everything at shutdown.
 	stopCtx context.Context

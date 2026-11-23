@@ -3,6 +3,15 @@
 What changed in WittyTuner, newest first. What changed before it had a repository of its own is in the
 [WittyMediaServer changelog](https://github.com/wittywilla/WittyMediaServer/blob/master/CHANGELOG.md).
 
+## 0.5.1
+
+- **Tidier buttons in Live TV settings.** Where a section has several buttons (Duplicates, Search for tuners and Add live TV; Read the list and Scan for channels; the guide review's), they sit in one evenly spaced row that wraps on a narrow screen, instead of touching and sitting at different heights.
+
+## Developer notes for 0.5.1
+
+- A `Section`'s `actions` is a block in the server's settings pages, so several buttons in a fragment ran together and baseline-aligned a link against buttons. They are wrapped in `.tvs-actions` (flex, wrap, `gap: var(--sp-2)`).
+- The unused `Manager.nextID` field is gone (staticcheck U1000).
+
 ## 0.5.0
 
 **New**

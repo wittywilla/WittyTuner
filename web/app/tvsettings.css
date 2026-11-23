@@ -136,3 +136,5 @@
 .tvs-review-find .input { flex: 1; min-width: 0; max-width: 360px; }
 .tvs-check { display: inline-flex; gap: 6px; align-items: center; margin-right: 12px; white-space: nowrap; }
 .tvs-toolbar select.input { width: auto; max-width: 14em; }
+/* A section's several buttons: one row, spaced, wrapping on a narrow screen (a Section's actions are a block). */
+.tvs-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--sp-2); }
