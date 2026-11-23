@@ -10,6 +10,18 @@ It's a module of [WittyMediaServer](https://github.com/wittywilla/WittyMediaServ
 
 <sub>The guide, here with channels made from a library, playing [Aladdin and His Wonderful Lamp](https://commons.wikimedia.org/wiki/File:Aladdin_And_His_Wonderful_Lamp_(1939).webm), Dave Fleischer, Fleischer Studios, 1939, public domain. From a test server. The server's [credits list](https://github.com/wittywilla/WittyMediaServer/blob/master/docs/images/CREDITS.md) names everything shown.</sub>
 
+![The guide in TV mode, with five channels and Shortcuts open along the foot](docs/images/tv-guide-shortcuts.webp)
+
+<sub>TV mode's guide, with Shortcuts open, playing [The Cabinet of Dr. Caligari](https://commons.wikimedia.org/wiki/File:The_Cabinet_of_Dr._Caligari.webm), Robert Wiene, 1920, public domain. From a test server. The server's [credits list](https://github.com/wittywilla/WittyMediaServer/blob/master/docs/images/CREDITS.md) names everything shown.</sub>
+
+![Adding an HDHomeRun by its address, and what it answered](docs/images/hdhomerun-details.webp)
+
+<sub>Adding an HDHomeRun, here a stand-in for one at an example address.</sub>
+
+![The channels an HDHomeRun lists, one of them encrypted](docs/images/hdhomerun-channels.webp)
+
+<sub>Its channels, with made-up names. The encrypted one is listed, and never tuned.</sub>
+
 ![The channels and tuners page in Settings](docs/images/settings-channels.webp)
 
 <sub>Settings, Channels & tuners, on a server with no tuner attached.</sub>
