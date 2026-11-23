@@ -115,6 +115,8 @@ That builds with WittyModule's web builder (`kit/web/build-bundle.mjs`, from a W
 
 To use it as a library, `wittytuner.New(driver, config, env)` gives a source with `Channels` and `Open`. `wittytuner.Drivers(env)` describes every driver and its settings, and `wittytuner.Discover(ctx, env)` looks for tuners. The custom command driver stays off unless the host sets `Env.AllowCommands`.
 
+**Working on a Mac?** Start with WittyMediaServer's [MAC-START-HERE.md](https://github.com/wittywilla/WittyMediaServer/blob/v0.8.1-alpha/MAC-START-HERE.md): what to install, what to clone, and every Mac task in order: this repository's is item 7.5 (#26).
+
 ## Licence
 
 GNU Affero General Public License v3.0 (or later): see [LICENSE](LICENSE) and [NOTICE](NOTICE). If you redistribute it or build on it, please keep the NOTICE attribution. Each release archive carries a `THIRD-PARTY-NOTICES.txt` for what its programs link.
