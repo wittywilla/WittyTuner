@@ -6,10 +6,12 @@ What changed in WittyTuner, newest first. What changed before it had a repositor
 ## 0.5.1
 
 - **Tidier buttons in Live TV settings.** Where a section has several buttons (Duplicates, Search for tuners and Add live TV; Read the list and Scan for channels; the guide review's), they sit in one evenly spaced row that wraps on a narrow screen, instead of touching and sitting at different heights.
+- **Fixed:** a request for a page of live TV rows starting before the first could stop WittyTuner's helper.
 
 ## Developer notes for 0.5.1
 
 - A `Section`'s `actions` is a block in the server's settings pages, so several buttons in a fragment ran together and baseline-aligned a link against buttons. They are wrapped in `.tvs-actions` (flex, wrap, `gap: var(--sp-2)`).
+- `pageItems` clamps a negative offset (it sliced `rows[-1:]` and panicked); `FuzzPageItems` covers any offset and limit.
 - The unused `Manager.nextID` field is gone (staticcheck U1000).
 - Fuzz tests for what WittyTuner reads from others: `FuzzPlaylistAndTunerText` (M3U playlists, whose logos must stay web addresses; locators, which must read back as written; channels.conf, transponder lists, SVDRP lines, capture-device lists, HDHomeRun replies) and `xmltv.FuzzParse` (guides and their times).
 

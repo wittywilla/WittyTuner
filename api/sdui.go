@@ -60,9 +60,7 @@ func srcStr(s sdui.Source, name string) string {
 
 func pageItems(rows []sdui.Item, offset, limit int) sdui.ItemsAnswer {
 	total := len(rows)
-	if offset > total {
-		offset = total
-	}
+	offset = min(max(offset, 0), total) // a caller's offset may be anything, a negative one too
 	rows = rows[offset:]
 	more := false
 	if limit > 0 && len(rows) > limit {
