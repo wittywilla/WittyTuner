@@ -11,6 +11,7 @@ What changed in WittyTuner, newest first. What changed before it had a repositor
 
 - A `Section`'s `actions` is a block in the server's settings pages, so several buttons in a fragment ran together and baseline-aligned a link against buttons. They are wrapped in `.tvs-actions` (flex, wrap, `gap: var(--sp-2)`).
 - The unused `Manager.nextID` field is gone (staticcheck U1000).
+- Fuzz tests for what WittyTuner reads from others: `FuzzPlaylistAndTunerText` (M3U playlists, whose logos must stay web addresses; locators, which must read back as written; channels.conf, transponder lists, SVDRP lines, capture-device lists, HDHomeRun replies) and `xmltv.FuzzParse` (guides and their times).
 
 ## 0.5.0
 
